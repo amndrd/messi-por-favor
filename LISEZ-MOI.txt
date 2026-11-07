@@ -1,0 +1,40 @@
+MESSI POR FAVOR — le site du disque
+====================================
+
+POUR REGARDER
+1. Branche le disque sur un Mac.
+2. Double-clique sur « ▶ Messi por favor », tout en haut du disque.
+3. Le site s'ouvre dans le navigateur. Pas de compte, pas besoin d'internet.
+
+La première fois, le Mac demande si « Messi por favor » peut accéder aux
+fichiers d'un volume amovible : clique sur « Autoriser ».
+Tant que le site tourne, « Messi por favor » est dans le Dock. Un clic sur
+son icône rouvre la page si tu l'as fermée.
+
+POUR ÉJECTER LE DISQUE
+Clique sur « Quitter » en haut à droite du site (ou quitte « Messi por favor »
+dans le Dock), puis éjecte le disque. Si tu fermes simplement l'onglet, le site
+s'arrête tout seul 1 min 30 après.
+
+SI LE BOUTON NE MARCHE PAS
+Ouvre ce dossier et double-clique sur « Secours - lancer dans le Terminal ».
+Le site tourne tant que la fenêtre du Terminal reste ouverte.
+
+BON À SAVOIR
+- Il faut un Mac sous macOS 11 (Big Sur) ou plus récent. Le disque est au format
+  Mac : un PC Windows ne peut pas le lire.
+- Ta progression (« Reprendre ») et « Ma liste » sont enregistrées sur le disque :
+  on les retrouve en le branchant sur un autre Mac.
+- Un film ou une série ajouté sur le disque apparaît tout seul dans le site, avec
+  le nom du fichier. Pour une fiche complète (affiche, résumé, note…), il faut
+  l'ajouter dans catalogue.json.
+
+CE QU'IL Y A DANS CE DOSSIER
+  server.js, index.html, css/, js/, fonts/   le site
+  images/                                     affiches et images de fond
+  catalogue.json                              les fiches des films et des séries
+  progression.json                            progression et « Ma liste » (créé à l'usage)
+  outils/                                     Node.js 22 et FFmpeg 9 pour Mac Apple Silicon
+                                              et Intel (lecture, sous-titres, langues)
+  outils/lanceur/                             le code du bouton « ▶ Messi por favor »
+  cache/                                      sous-titres déjà extraits, journal du site

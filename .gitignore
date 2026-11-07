@@ -1,0 +1,18 @@
+# Données personnelles : les fiches du disque, la progression, le cache
+catalogue.json
+progression.json
+cache/
+
+# Affiches et images des films (seules les images du site sont versionnées)
+images/*
+!images/favicon.svg
+!images/favicon-180.png
+!images/website-logo.png
+
+# Node.js et FFmpeg embarqués sur le disque (environ 500 Mo)
+outils/node-*
+outils/ffmpeg-*
+outils/ffprobe-*
+
+# macOS
+.DS_Store
