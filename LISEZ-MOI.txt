@@ -36,5 +36,5 @@ CE QU'IL Y A DANS CE DOSSIER
   progression.json                            progression et « Ma liste » (créé à l'usage)
   outils/                                     Node.js 22 et FFmpeg 9 pour Mac Apple Silicon
                                               et Intel (lecture, sous-titres, langues)
-  outils/lanceur/                             le code du bouton « ▶ Messi por favor »
+  outils/lanceur/                             le code du bouton « ▶ Messi por favor » et son icône
   cache/                                      sous-titres déjà extraits, journal du site
