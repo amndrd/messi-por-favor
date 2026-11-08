@@ -274,33 +274,18 @@ const row = (title, items, more, { sub = '', html = '' } = {}) => (html || items
 const initRails = () => $$('.rail-wrap', view).forEach(w => {
   const r = $('.rail', w), prev = $('.prev', w), next = $('.next', w);
   const paint = () => { prev.hidden = r.scrollLeft < 8; next.hidden = r.scrollLeft + r.clientWidth > r.scrollWidth - 8; };
-  const by = (dir) => r.scrollBy({ left: dir * Math.max(200, r.clientWidth - 160), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  // genres du catalogue : une page entière de vignettes ; ailleurs, presque un écran
+  const step = () => {
+    if (!r.classList.contains('cat-grail')) return Math.max(200, r.clientWidth - 160);
+    const cs = getComputedStyle(r);
+    return r.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) + parseFloat(cs.columnGap);
+  };
+  const by = (dir) => r.scrollBy({ left: dir * step(), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   prev.addEventListener('click', () => by(-1));
   next.addEventListener('click', () => by(1));
-  r.addEventListener('scroll', paint, { passive: true });
+  r.addEventListener('scroll', () => { paint(); hidePreview(); }, { passive: true });
   new ResizeObserver(paint).observe(r);
 });
-
-const searchBar = (value = '') => `<form class="search" role="search" id="search-form">
-    ${icon('search')}<label class="sr-only" for="search-input">Rechercher dans le catalogue</label>
-    <input id="search-input" name="q" type="search" autocomplete="off" spellcheck="false" value="${esc(value)}" placeholder="${esc(examplePlaceholder())}">
-  </form>`;
-
-// Un titre du catalogue en exemple dans la barre de recherche
-const examplePlaceholder = () => {
-  const pool = S.items.filter(it => it.poster);
-  const it = pool[Math.floor(Math.random() * pool.length)];
-  return it ? `Titre, réalisateur, acteur… (« ${it.title} »)` : 'Titre, réalisateur, acteur…';
-};
-let placeholderTimer = null;
-const rotatePlaceholder = () => {
-  clearInterval(placeholderTimer);
-  placeholderTimer = setInterval(() => {
-    const input = $('#search-input');
-    if (!input) return clearInterval(placeholderTimer);
-    if (!input.value && document.activeElement !== input) input.placeholder = examplePlaceholder();
-  }, 3500);
-};
 
 // ─── ACTIONS COMMUNES ─────────────────────────────────────────────────────────
 // Lecture : le film, ou l'épisode en cours de la série (sinon le premier)
@@ -310,6 +295,64 @@ const playItem = (it) => {
   if (!eps.length) return toast('Les épisodes ne sont pas encore disponibles');
   openPlayer(it, currentEpisode(it.id) || eps[0]);
 };
+// ─── APERÇU AU SURVOL ─────────────────────────────────────────────────────────
+// Souris arrêtée sur une affiche : elle s'ouvre en grand (image du film, note, genres,
+// résumé, Lecture, Fiche). L'aperçu se ferme dès que la souris en sort.
+let pv = null, pvTimer = null;
+const canHover = matchMedia('(hover: hover) and (pointer: fine)');
+const hidePreview = () => {
+  clearTimeout(pvTimer);
+  if (!pv) return;
+  const el = pv.el; pv = null;
+  el.classList.add('out');
+  setTimeout(() => el.remove(), 160);
+};
+const showPreview = (c) => {
+  const it = S.byKey.get(c.dataset.key);
+  if (!it || !c.isConnected || wall) return;
+  hidePreview();
+  const r = $('.im', c).getBoundingClientRect();
+  const w = Math.round(Math.max(320, Math.min(380, r.width * 2)));
+  const el = document.createElement('div');
+  el.className = 'pv';
+  el.innerHTML = `<a class="pv-im" href="/${it.kind}/${esc(it.id)}" data-link tabindex="-1">${placeholder()}${imgTag(it.backdrop || it.poster)}<b>${esc(it.title)}</b></a>
+    <div class="pv-bd"><div class="meta">${metaHtml(it.rating, [it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it), it.director])}</div>
+      ${it.genres.length ? `<div class="pv-gs">${it.genres.slice(0, 3).map(g => `<i style="--g:${GENRE_TINT[g] || '90,90,100'}">${esc(g)}</i>`).join('')}</div>` : ''}
+      ${it.description ? `<p>${esc(it.description)}</p>` : ''}
+      <div class="pv-bt"><button class="btn play" type="button" data-pv="play">${icon('play')}${itemProgress(it) ? 'Reprendre' : 'Lecture'}</button>
+        <a class="btn glass" href="/${it.kind}/${esc(it.id)}" data-link>${icon('info')}Fiche</a></div></div>`;
+  el.style.width = w + 'px';
+  const vw = document.documentElement.clientWidth;
+  el.style.left = Math.max(scrollX + 12, Math.min(scrollX + vw - w - 12, r.left + scrollX + r.width / 2 - w / 2)) + 'px';
+  const img = $('img', c);
+  const t = img && img.complete && img.naturalWidth && tintOf(img);
+  if (t) el.style.setProperty('--ct', t);
+  document.body.append(el);
+  // sous la barre du haut, et sans dépasser le bas de l'écran
+  const minTop = scrollY + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav')) + 6;
+  const maxTop = scrollY + innerHeight - el.offsetHeight - 12;
+  el.style.top = Math.max(minTop, Math.min(maxTop, r.top + scrollY - 16)) + 'px';
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('[data-pv="play"]')) { hidePreview(); playItem(it); }
+    else if (e.target.closest('a[data-link]')) hidePreview();
+  });
+  pv = { el, card: c };
+};
+view.addEventListener('pointerover', (e) => {
+  if (e.pointerType !== 'mouse' || !canHover.matches) return;
+  const c = e.target.closest('.cp[data-key]');
+  if (!c || pv?.card === c) return;
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(() => showPreview(c), 550);
+});
+view.addEventListener('pointerout', (e) => {
+  const c = e.target.closest('.cp[data-key]');
+  if (c && !c.contains(e.relatedTarget)) clearTimeout(pvTimer);
+});
+// la souris sort de l'aperçu (ou n'y est jamais entrée) : il se ferme
+document.addEventListener('pointermove', (e) => { if (pv && !pv.el.contains(e.target) && e.target !== pv.card && !pv.card.contains(e.target)) hidePreview(); }, { passive: true });
+addEventListener('scroll', hidePreview, { passive: true });
+
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 const routes = [
   [/^\/$/,                 () => viewHome()],
@@ -343,7 +386,12 @@ document.fonts?.ready.then(setTab);
 
 // En-tête transparent sur la grande image, opaque dès qu'on descend
 const header = $('#header');
-const paintHeader = () => header.classList.toggle('solid', scrollY > 40);
+const paintHeader = () => {
+  header.classList.toggle('solid', scrollY > 40);
+  // barre de filtres du catalogue collée en haut : elle prend un fond
+  const w = $('#cat-wrap');
+  if (w) w.classList.toggle('stuck', w.getBoundingClientRect().top <= parseFloat(getComputedStyle(w).top) + 1);
+};
 // L'onglet ouvert prend la couleur du film affiché (null : pilule de verre neutre)
 const setNavTint = (t) => { header.classList.toggle('tinted', !!t); if (t) header.style.setProperty('--nt', t); };
 addEventListener('scroll', paintHeader, { passive: true });
@@ -351,9 +399,9 @@ addEventListener('scroll', paintHeader, { passive: true });
 const render = () => {
   if (!$('#player').hidden) closePlayer();
   closeWall();
+  hidePreview();
   stopHero();
   setNavTint(null);
-  closeOpenDD = null;
   const path = location.pathname;
   for (const [re, fn] of routes) {
     const m = path.match(re);
@@ -382,17 +430,6 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   go(a.getAttribute('href'));
 });
-
-const bindSearch = (onInput) => {
-  const form = $('#search-form'), input = $('#search-input');
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const q = input.value.trim();
-    if (onInput) onInput(q, true); else go('/catalogue' + (q ? '?q=' + encodeURIComponent(q) : ''));
-  });
-  if (onInput) { let t; input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => onInput(input.value.trim()), 150); }); }
-  rotatePlaceholder();
-};
 
 // ─── ACCUEIL ──────────────────────────────────────────────────────────────────
 // Ce qu'on regardait : le dernier contenu commencé de chaque titre
@@ -510,11 +547,19 @@ const viewHome = () => {
 };
 
 // ─── CATALOGUE ────────────────────────────────────────────────────────────────
-const SORTS = { recent: 'Ajout récent', title: 'Titre (A → Z)', newest: 'Sortie (récente)', oldest: 'Sortie (ancienne)', rating: 'Note' };
+// En haut : la frise des années (on tire les poignées, on glisse pour tracer une période,
+// un clic choisit une décennie) et les genres en couleur. Dessous : une barre qui résume
+// les filtres actifs et reste en haut quand on descend. « Par année » range par décennie.
+const SORTS = { recent: 'Récents', rating: 'Mieux notés', year: 'Par année', title: 'A – Z' };
+const OLD_SORTS = { newest: 'year', oldest: 'year' }; // anciens liens
+const TYPE_TITLES = { film: 'Films', serie: 'Séries', anime: 'Animes', animation: 'Animation' };
+const yearOf = (it) => parseInt(it.year, 10) || null;
+const decadeLabel = (d) => 'les années ' + (d < 2000 ? String(d).slice(2) : d);
 
 const readFilters = () => {
-  const q = new URLSearchParams(location.search);
-  return { q: q.get('q') || '', type: q.get('type') || '', genre: q.get('genre') || '', from: q.get('de') || '', to: q.get('a') || '', sort: SORTS[q.get('tri')] ? q.get('tri') : 'recent' };
+  const q = new URLSearchParams(location.search), tri = OLD_SORTS[q.get('tri')] || q.get('tri');
+  return { q: q.get('q') || '', type: TYPES[q.get('type')] ? q.get('type') : '', genre: q.get('genre') || '',
+    from: q.get('de') || '', to: q.get('a') || '', sort: SORTS[tri] ? tri : 'recent' };
 };
 const writeFilters = (f) => {
   const q = new URLSearchParams();
@@ -525,12 +570,11 @@ const writeFilters = (f) => {
 
 const filterItems = (f) => {
   const words = norm(f.q) ? f.q.split(/\s+/).map(norm).filter(Boolean) : [];
-  const yr = (it) => parseInt(it.year, 10) || null;
-  let list = S.items.filter(it => {
+  const list = S.items.filter(it => {
     if (f.type && it.type !== f.type) return false;
     if (f.genre && !it.genres.includes(f.genre)) return false;
-    if (f.from && !(yr(it) >= +f.from)) return false;
-    if (f.to && !(yr(it) <= +f.to)) return false;
+    if (f.from && !(yearOf(it) >= +f.from)) return false;
+    if (f.to && !(yearOf(it) <= +f.to)) return false;
     if (words.length) {
       const hay = norm([it.title, it.director, it.year, ...it.genres, ...it.cast, TYPES[it.type]].join(' '));
       if (!words.every(w => hay.includes(w))) return false;
@@ -540,168 +584,245 @@ const filterItems = (f) => {
   const by = {
     recent: (a, b) => b.addedAt - a.addedAt,
     title:  (a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }),
-    newest: (a, b) => (yr(b) || 0) - (yr(a) || 0),
-    oldest: (a, b) => (yr(a) || 9999) - (yr(b) || 9999),
     rating: (a, b) => (b.rating || 0) - (a.rating || 0),
+    year:   (a, b) => (yearOf(a) || 9999) - (yearOf(b) || 9999) || (b.rating || 0) - (a.rating || 0),
   }[f.sort];
   return list.sort(by);
 };
 
-// ─── LISTES DÉROULANTES ───────────────────────────────────────────────────────
-// Remplacent les <select> natifs, dont la liste ne se laisse pas habiller.
-// Motif « combobox » de l'ARIA : le focus reste sur le bouton, les flèches parcourent la liste.
-// prefix : petit mot affiché devant le choix (« Genre », « Tri »…), qui sert aussi d'étiquette
-const dropdown = (id, opts, value, { label = '', prefix = '', variant = '', width = '' } = {}) => {
-  const cur = opts.find(o => o[0] === value) || opts[0];
-  if (prefix && !label) label = id + '-l';
-  return `<div class="dd${variant ? ' dd-' + variant : ''}" id="${id}" data-value="${esc(cur[0])}"${width ? ` style="--w:${width}"` : ''}>
-    ${prefix ? `<span class="sr-only" id="${id}-l">${esc(prefix)}</span>` : ''}
-    <div class="${variant === 'b' ? 'sel-b' : 'select'} dd-btn"${prefix ? ` data-prefix="${esc(prefix)}"` : ''} tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false"
-      aria-controls="${id}-list" aria-labelledby="${label ? label + ' ' : ''}${id}-v"><span id="${id}-v">${esc(cur[1])}</span></div>
-    <ul class="dd-list" id="${id}-list" role="listbox"${label ? ` aria-labelledby="${label}"` : ''} hidden>
-      ${opts.map(([v, l], i) => `<li role="option" id="${id}-o${i}" data-v="${esc(v)}" aria-selected="${v === cur[0]}"${v === '' ? ' class="all"' : ''}><span>${esc(l)}</span><small></small></li>`).join('')}
-    </ul>
-  </div>`;
-};
-
-let closeOpenDD = null;
-document.addEventListener('pointerdown', (e) => { if (closeOpenDD && !e.target.closest('.dd.open')) closeOpenDD(); });
-
-const initDropdowns = (root, onChange) => $$('.dd', root).forEach(dd => {
-  const btn = $('.dd-btn', dd), list = $('.dd-list', dd);
-  const items = () => $$('[role=option]', list);
-  let active = -1, typed = '', typedAt = 0;
-
-  const setActive = (i, scroll = true) => {
-    const o = items();
-    active = Math.max(0, Math.min(o.length - 1, i));
-    o.forEach((li, j) => li.classList.toggle('active', j === active));
-    btn.setAttribute('aria-activedescendant', o[active].id);
-    if (scroll) o[active].scrollIntoView({ block: 'nearest' });
-  };
-  // Vers le haut s'il n'y a pas la place en dessous ; jamais au-delà du bord droit
-  const place = () => {
-    list.classList.remove('up', 'right');
-    const r = list.getBoundingClientRect(), b = btn.getBoundingClientRect();
-    if (r.bottom > innerHeight - 8 && b.top > innerHeight - b.bottom) list.classList.add('up');
-    if (r.right > document.documentElement.clientWidth - 8) list.classList.add('right');
-  };
-  const close = () => {
-    list.hidden = true; dd.classList.remove('open');
-    btn.setAttribute('aria-expanded', 'false'); btn.removeAttribute('aria-activedescendant');
-    if (closeOpenDD === close) closeOpenDD = null;
-  };
-  const open = (i) => {
-    if (closeOpenDD) closeOpenDD();
-    list.hidden = false; dd.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
-    place();
-    setActive(i ?? items().findIndex(li => li.getAttribute('aria-selected') === 'true'));
-    closeOpenDD = close;
-  };
-  const pick = (i) => {
-    const li = items()[i];
-    if (!li) return;
-    items().forEach(o => o.setAttribute('aria-selected', o === li));
-    $('span', btn).textContent = $('span', li).textContent;
-    const changed = dd.dataset.value !== li.dataset.v;
-    dd.dataset.value = li.dataset.v;
-    close(); btn.focus();
-    if (changed) onChange(dd.id, li.dataset.v);
-  };
-  // Taper une lettre saute au premier choix qui commence par elle
-  const typeahead = (ch) => {
-    const now = Date.now();
-    typed = (now - typedAt > 700 ? '' : typed) + ch; typedAt = now;
-    const o = items(), start = typed.length === 1 ? active + 1 : active;
-    for (let k = 0; k < o.length; k++) {
-      const j = (start + k) % o.length;
-      if (norm($('span', o[j]).textContent).startsWith(norm(typed))) return setActive(j);
-    }
-  };
-
-  btn.addEventListener('click', () => list.hidden ? open() : close());
-  btn.addEventListener('keydown', (e) => {
-    const k = e.key, letter = k.length === 1 && k !== ' ' && !e.metaKey && !e.ctrlKey && !e.altKey;
-    if (list.hidden) {
-      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(k)) { e.preventDefault(); open(); }
-      else if (k === 'Home' || k === 'End') { e.preventDefault(); open(k === 'Home' ? 0 : items().length - 1); }
-      else if (letter) { open(); typeahead(k); }
-      return;
-    }
-    if (k === 'ArrowDown') { e.preventDefault(); setActive(active + 1); }
-    else if (k === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
-    else if (k === 'Home') { e.preventDefault(); setActive(0); }
-    else if (k === 'End') { e.preventDefault(); setActive(items().length - 1); }
-    else if (k === 'PageDown') { e.preventDefault(); setActive(active + 8); }
-    else if (k === 'PageUp') { e.preventDefault(); setActive(active - 8); }
-    else if (k === 'Enter' || k === ' ') { e.preventDefault(); pick(active); }
-    else if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-    else if (k === 'Tab') close();
-    else if (letter) typeahead(k);
-  });
-  list.addEventListener('mousedown', (e) => e.preventDefault()); // garder le focus sur le bouton
-  list.addEventListener('pointermove', (e) => { const li = e.target.closest('[role=option]'); if (li) setActive(items().indexOf(li), false); });
-  list.addEventListener('click', (e) => { const li = e.target.closest('[role=option]'); if (li) pick(items().indexOf(li)); });
-});
-
-const TYPE_TITLES = { film: 'Films', serie: 'Séries', anime: 'Animes', animation: 'Animation' };
+// Une ligne du mode liste : image du film, réalisateur, genres, résumé, note, Lecture
+const listRow = (it) => `<a class="cat-row" href="/${it.kind}/${esc(it.id)}" data-link>
+    <span class="cat-th">${placeholder()}${imgTag(it.backdrop || it.poster)}</span>
+    <span class="cat-tx"><b>${esc(it.title)}</b>
+      <small>${isNew(it) ? '<i class="nw" title="Nouveau sur le disque"></i>' : ''}${esc([it.director, it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it)].filter(Boolean).join(', '))}</small>
+      ${it.genres.length ? `<span class="cat-gs">${it.genres.slice(0, 3).map(g => `<i style="--g:${GENRE_TINT[g] || '90,90,100'}">${esc(g)}</i>`).join('')}</span>` : ''}
+      ${it.description ? `<span class="cat-syn">${esc(it.description)}</span>` : ''}</span>
+    <span class="cat-rs">${it.rating ? `<span class="cat-rt">${icon('star')}${fmtRating(it.rating)}</span>` : ''}
+      <span class="cat-pl" data-play="${esc(it.key)}" role="button" tabindex="-1" aria-label="Lecture de ${esc(it.title)}">${icon('play')}</span></span>
+  </a>`;
 
 const viewCatalogue = () => {
   const f = readFilters();
-  const genres = [...new Set(S.items.flatMap(it => it.genres))].sort((a, b) => a.localeCompare(b, 'fr'));
-  const years = [...new Set(S.items.map(it => parseInt(it.year, 10)).filter(Boolean))].sort((a, b) => b - a).map(String);
+  let mode = 'grid';
+  try { if (localStorage.getItem('mpf-affichage') === 'liste') mode = 'list'; } catch (e) {}
+  const years = S.items.map(yearOf).filter(Boolean);
+  const Y0 = Math.min(...years), Y1 = Math.max(...years), SPAN = Y1 - Y0 + 1;
+  const decades = [];
+  for (let d = Math.ceil(Y0 / 10) * 10; d <= Y1; d += 10) decades.push(d);
+  const genres = [...new Set(S.items.flatMap(it => it.genres))]
+    .map(g => [g, S.items.filter(it => it.genres.includes(g)).length]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  // Une image par genre : la scène du film le mieux noté du genre (jamais deux fois la même)
+  const used = new Set(), pics = new Map();
+  const best = (list) => list.filter(it => it.backdrop && !used.has(it)).sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
+  genres.forEach(g => {
+    const it = best(S.items.filter(x => x.genres[0] === g)) || best(S.items.filter(x => x.genres.includes(g)));
+    if (it) { used.add(it); pics.set(g, it.backdrop); }
+  });
 
-  view.innerHTML = `<div class="page">
-    <header class="page-head">
-      <div><h1 class="page-title" id="cat-title">Catalogue</h1><p class="page-sub" id="res-count" aria-live="polite"></p></div>
-      ${searchBar(f.q)}
-    </header>
-    <div class="toolbar">
-      <div class="seg" id="f-types" role="group" aria-label="Type">
-        ${[['', 'Tout'], ...Object.entries(PLURAL)].map(([v, l]) => `<button type="button" data-type="${v}" aria-pressed="${f.type === v}">${esc(l)}<small></small></button>`).join('')}
-        ${S.collections.length ? `<a href="/collections" data-link>Collections<small>${S.collections.length}</small></a>` : ''}
+  view.innerHTML = `<div class="page cat">
+    <header class="page-head"><div><h1 class="page-title" id="cat-title">Catalogue</h1>
+      <p class="page-sub">${S.items.length} titres, de ${Y0} à ${Y1}</p></div></header>
+    <section class="cat-board" aria-label="Filtres">
+      <div class="cat-years" id="cat-years"><div class="cat-years-in">
+      <div class="cat-fh"><h2>Les années</h2><span class="cat-per" id="cat-per" aria-live="polite"></span>
+        <button class="cat-all" id="cat-all" type="button" hidden>Toutes les années</button></div>
+      <div class="cat-frise" id="cat-frise" title="Tire les poignées, ou glisse pour choisir une période. Un clic choisit une décennie.">
+        <div class="cat-bars">${Array.from({ length: SPAN }, (_, i) => `<i data-y="${Y0 + i}"></i>`).join('')}</div>
+        <div class="cat-range" id="cat-range">
+          <span class="cat-h" data-h="from" role="slider" tabindex="0" aria-label="Première année" aria-valuemin="${Y0}" aria-valuemax="${Y1}"></span>
+          <span class="cat-h" data-h="to" role="slider" tabindex="0" aria-label="Dernière année" aria-valuemin="${Y0}" aria-valuemax="${Y1}"></span>
+        </div>
       </div>
-      <span class="tb-sep" aria-hidden="true"></span>
-      <div class="filters">
-        ${dropdown('f-genre', [['', 'Tous'], ...genres.map(g => [g, g])], f.genre, { prefix: 'Genre' })}
-        ${dropdown('f-from', [['', 'Début'], ...years.slice().reverse().map(y => [y, y])], f.from, { prefix: 'De' })}
-        ${dropdown('f-to', [['', 'Fin'], ...years.map(y => [y, y])], f.to, { prefix: 'À' })}
-        ${dropdown('f-sort', Object.entries(SORTS), f.sort, { prefix: 'Tri' })}
-        <button class="reset" id="f-reset" type="button" hidden>${icon('reset')}Tout effacer</button>
+      <div class="cat-dec" aria-hidden="true">${decades.map(d => `<span data-d="${d}" style="left:${(d - Y0 + .5) / SPAN * 100}%">${d}</span>`).join('')}</div>
+      </div></div>
+      <div class="cat-genres" role="group" aria-label="Genres">
+        <div class="cat-gh"><h2>Genres</h2><span class="cat-per" id="cat-gsel" aria-live="polite"></span>
+          <button class="cat-all" id="cat-gall" type="button" hidden>Tous les genres</button></div>
+        <div class="rail-wrap"><button class="rail-btn prev" type="button" aria-label="Genres précédents" tabindex="-1" hidden>${icon('left')}</button>
+          <div class="rail cat-grail">${genres.map(g => `<button type="button" class="cat-gt" data-g="${esc(g)}" style="--g:${GENRE_TINT[g] || '80,80,90'}" aria-pressed="false">
+            ${pics.get(g) ? `<img src="${esc(pics.get(g))}" alt="" loading="lazy" decoding="async">` : ''}<b>${esc(g)}</b><small></small></button>`).join('')}</div>
+          <button class="rail-btn next" type="button" aria-label="Genres suivants" tabindex="-1" hidden>${icon('right')}</button></div>
       </div>
-    </div>
-    <section id="results"></section>
+    </section>
+    <div class="cat-wrap" id="cat-wrap"><div class="cat-bar">
+      <div class="cat-seg" id="cat-types" role="group" aria-label="Type">${[['', 'Tout'], ...Object.entries(PLURAL)].map(([v, l]) =>
+        `<button type="button" data-type="${v}">${esc(l)}<small></small></button>`).join('')}</div>
+      <span class="cat-sep" aria-hidden="true"></span>
+      <div class="cat-act" id="cat-act"></div>
+      <span class="cat-n" id="cat-n" aria-live="polite"></span>
+      <div class="cat-seg cat-sort" role="group" aria-label="Trier">${Object.entries(SORTS).map(([v, l]) => `<button type="button" data-sort="${v}">${l}</button>`).join('')}</div>
+      <div class="cat-seg cat-mode" role="group" aria-label="Affichage">
+        <button type="button" data-mode="grid" aria-label="Affiches" title="Affiches">${icon('grid')}</button>
+        <button type="button" data-mode="list" aria-label="Liste" title="Liste">${icon('list')}</button></div>
+    </div></div>
+    <section class="cat-res" id="results"></section>
   </div>`;
 
-  const update = () => {
-    $$('.filters .dd').forEach(dd => $('.dd-btn', dd).classList.toggle('dim', !dd.dataset.value && dd.id !== 'f-sort'));
-    // Nombre de titres derrière chaque choix, compte tenu des autres filtres
-    $$('#f-types [data-type]').forEach(b => {
-      b.setAttribute('aria-pressed', b.dataset.type === f.type);
-      $('small', b).textContent = filterItems({ ...f, type: b.dataset.type }).length;
+  const frise = $('#cat-frise'), bars = $$('.cat-bars i', frise), range = $('#cat-range'), wrap = $('#cat-wrap'), board = $('.cat-board');
+  const lo = () => f.from ? Math.max(Y0, +f.from) : Y0, hi = () => f.to ? Math.min(Y1, +f.to) : Y1;
+
+  // La frise : hauteur des barres = titres de l'année (avec les autres filtres), période en blanc
+  const paintFrise = (a = lo(), b = hi()) => {
+    const base = filterItems({ ...f, from: '', to: '' });
+    const cnt = new Map();
+    base.forEach(it => { const y = yearOf(it); if (y) cnt.set(y, (cnt.get(y) || 0) + 1); });
+    const top = Math.max(1, ...cnt.values());
+    bars.forEach(i => {
+      const y = +i.dataset.y, c = cnt.get(y) || 0;
+      i.style.height = c ? `${8 + c / top * 88}%` : '3px';
+      i.classList.toggle('in', c > 0 && y >= a && y <= b);
     });
-    $$('#f-genre-list [role=option]').forEach(li => { $('small', li).textContent = filterItems({ ...f, genre: li.dataset.v }).length; });
-    const list = filterItems(f);
+    range.style.left = `${(a - Y0) / SPAN * 100}%`; range.style.width = `${(b - a + 1) / SPAN * 100}%`;
+    const full = a === Y0 && b === Y1;
+    range.classList.toggle('full', full);
+    $$('.cat-dec span').forEach(s => s.classList.toggle('in', !full && +s.dataset.d >= Math.floor(a / 10) * 10 && +s.dataset.d <= b));
+    $$('.cat-h', range).forEach(h => { const v = h.dataset.h === 'from' ? a : b; h.setAttribute('aria-valuenow', v); h.setAttribute('aria-valuetext', String(v)); });
+    const n = base.filter(it => { const y = yearOf(it); return full || (y && y >= a && y <= b); }).length;
+    $('#cat-per').innerHTML = `<strong>${full ? 'Toutes les années' : `${a} – ${b}`}</strong>, ${n} titre${n > 1 ? 's' : ''}`;
+    $('#cat-all').hidden = full;
+  };
+  const setRange = (a, b) => {
+    a = Math.max(Y0, Math.min(a, b)); b = Math.min(Y1, Math.max(a, b));
+    f.from = a <= Y0 ? '' : String(a); f.to = b >= Y1 ? '' : String(b);
+    update();
+  };
+
+  // Dans la barre : ce qui est choisi, en pastilles qu'on retire d'un clic
+  const paintBar = (count) => {
     const title = TYPE_TITLES[f.type] || 'Catalogue';
     $('#cat-title').textContent = title;
     document.title = title + ' · Messi por favor';
-    $('#res-count').textContent = `${list.length} titre${list.length > 1 ? 's' : ''}${f.q ? ` pour « ${f.q} »` : ''}`;
-    const filtered = f.q || f.genre || f.from || f.to || f.sort !== 'recent';
-    $('#f-reset').hidden = !filtered;
-    $('#results').innerHTML = list.length
-      ? `<div class="grid">${list.map(it => card(it)).join('')}</div>`
-      : `<div class="empty"><b>Rien ne correspond</b>Essaie un autre mot, ou enlève un filtre.<br><button class="btn glass" type="button" data-reset>${icon('reset')}Tout effacer</button></div>`;
-    writeFilters(f);
-    setTab();
+    $$('#cat-types [data-type]').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.type === f.type);
+      $('small', b).textContent = filterItems({ ...f, type: b.dataset.type }).length;
+    });
+    // Vignettes de genres : nombre de titres (avec les autres filtres), ✓ sur le genre choisi
+    $('.cat-genres').classList.toggle('has', !!f.genre);
+    $$('.cat-gt').forEach(b => {
+      const on = b.dataset.g === f.genre, n = filterItems({ ...f, genre: b.dataset.g }).length;
+      b.setAttribute('aria-pressed', on); b.disabled = !on && !n;
+      $('small', b).innerHTML = on ? icon('check') : n;
+      b.setAttribute('aria-label', `${b.dataset.g}, ${n} titre${n > 1 ? 's' : ''}`);
+    });
+    const gn = f.genre ? filterItems(f).length : 0;
+    $('#cat-gsel').innerHTML = f.genre ? `<strong>${esc(f.genre)}</strong>, ${gn} titre${gn > 1 ? 's' : ''}` : `${$$('.cat-gt').length} genres`;
+    $('#cat-gall').hidden = !f.genre;
+    $$('[data-sort]', wrap).forEach(b => b.setAttribute('aria-pressed', b.dataset.sort === f.sort));
+    $$('[data-mode]', wrap).forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+    const pills = [
+      (f.from || f.to) && `<button type="button" class="cat-pill" data-clear="years">${lo()} – ${hi()}${icon('x')}</button>`,
+      f.genre && `<button type="button" class="cat-pill g" data-clear="genre" style="--g:${GENRE_TINT[f.genre] || '90,90,100'}">${esc(f.genre)}${icon('x')}</button>`,
+      f.q && `<button type="button" class="cat-pill q" data-clear="q">« ${esc(f.q)} »${icon('x')}</button>`,
+    ].filter(Boolean);
+    $('#cat-act').innerHTML = pills.join('') + (pills.length > 1 ? '<button type="button" class="cat-clear" data-clear="all">Tout effacer</button>' : '');
+    $('#cat-n').textContent = `${count} titre${count > 1 ? 's' : ''}`;
   };
-  // « Tout effacer » garde le type choisi (Films, Séries…)
-  const reset = () => go('/catalogue' + (f.type ? '?type=' + f.type : ''), { replace: true });
-  const keys = { 'f-genre': 'genre', 'f-from': 'from', 'f-to': 'to', 'f-sort': 'sort' };
-  initDropdowns($('.filters'), (id, v) => { f[keys[id]] = v; update(); });
-  $('#f-types').addEventListener('click', (e) => { const b = e.target.closest('[data-type]'); if (b) { f.type = b.dataset.type; update(); } });
-  $('#f-reset').addEventListener('click', reset);
-  $('#results').addEventListener('click', (e) => { if (e.target.closest('[data-reset]')) reset(); });
-  bindSearch((q) => { f.q = q; update(); });
+
+  const paintResults = (list) => {
+    const block = (arr) => mode === 'list' ? `<div class="cat-list">${arr.map(listRow).join('')}</div>` : `<div class="grid">${arr.map(it => card(it)).join('')}</div>`;
+    if (!list.length) {
+      $('#results').innerHTML = `<div class="empty"><b>Rien ne correspond</b>Élargis la période ou enlève un filtre.<br>
+        <button class="btn glass" type="button" data-clear="all">${icon('reset')}Tout effacer</button></div>`;
+      return;
+    }
+    if (f.sort !== 'year') { $('#results').innerHTML = block(list); return; }
+    const groups = new Map();
+    list.forEach(it => { const y = yearOf(it), d = y ? Math.floor(y / 10) * 10 : 0; if (!groups.has(d)) groups.set(d, []); groups.get(d).push(it); });
+    $('#results').innerHTML = [...groups].map(([d, arr]) => `<section class="cat-sec">
+        <div class="cat-dh"><b>${d || '?'}</b><span>${arr.length} titre${arr.length > 1 ? 's' : ''}${d ? ', ' + decadeLabel(d) : ', sans date'}</span></div>${block(arr)}</section>`).join('');
+  };
+
+  // La frise ne s'ouvre qu'avec le tri « Par année »
+  const yearsBox = $('#cat-years');
+  const paintYears = () => { const on = f.sort === 'year'; yearsBox.classList.toggle('open', on); yearsBox.inert = !on; };
+  let reveal = false;
+  const update = () => {
+    const list = filterItems(f);
+    paintYears(); paintFrise(); paintBar(list.length); paintResults(list);
+    writeFilters(f); setTab();
+    if (reveal) {
+      // on vient de choisir « Par année » : on remonte pour voir la frise s'ouvrir
+      reveal = false;
+      if (board.getBoundingClientRect().top < 0) scrollTo({ top: board.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav')) - 16, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    } else if (wrap.classList.contains('stuck')) {
+      // barre collée en haut : on remonte au début des résultats
+      scrollTo(0, board.getBoundingClientRect().bottom + scrollY - parseFloat(getComputedStyle(wrap).top));
+    }
+    paintHeader();
+  };
+
+  // ── Glisser sur la frise ──
+  const yearAt = (x) => { const r = frise.getBoundingClientRect(); return Y0 + Math.max(0, Math.min(SPAN - 1, Math.floor((x - r.left) / r.width * SPAN))); };
+  frise.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const r = frise.getBoundingClientRect(), xOf = (y) => r.left + (y - Y0) / SPAN * r.width;
+    let a = lo(), b = hi(), moved = false;
+    const start = yearAt(e.clientX), sx = e.clientX;
+    const grab = e.target.closest('.cat-h')?.dataset.h
+      || (Math.abs(e.clientX - xOf(a)) < 14 ? 'from' : Math.abs(e.clientX - xOf(b + 1)) < 14 ? 'to' : 'brush');
+    frise.setPointerCapture(e.pointerId);
+    frise.classList.add('drag');
+    const move = (ev) => {
+      if (Math.abs(ev.clientX - sx) > 4) moved = true;
+      const y = yearAt(ev.clientX);
+      if (grab === 'from') a = Math.min(y, b);
+      else if (grab === 'to') b = Math.max(y, a);
+      else if (moved) { a = Math.min(start, y); b = Math.max(start, y); }
+      paintFrise(a, b);
+    };
+    const up = () => {
+      frise.removeEventListener('pointermove', move); frise.removeEventListener('pointerup', up); frise.removeEventListener('pointercancel', up);
+      frise.classList.remove('drag');
+      if (grab === 'brush' && !moved) { a = Math.floor(start / 10) * 10; b = a + 9; } // un clic : la décennie
+      if (grab !== 'brush' && !moved) return paintFrise();
+      setRange(a, b);
+    };
+    frise.addEventListener('pointermove', move); frise.addEventListener('pointerup', up); frise.addEventListener('pointercancel', up);
+  });
+  // Au clavier : flèches (± 1 an), Maj + flèches (± 10 ans), Début / Fin
+  $$('.cat-h', range).forEach(h => h.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[e.key] * (e.shiftKey ? 10 : 1);
+    const isFrom = h.dataset.h === 'from';
+    let a = lo(), b = hi();
+    if (step) { if (isFrom) a += step; else b += step; }
+    else if (e.key === 'Home') { if (isFrom) a = Y0; else b = a; }
+    else if (e.key === 'End') { if (isFrom) a = b; else b = Y1; }
+    else return;
+    e.preventDefault();
+    setRange(Math.min(a, b), Math.max(a, b));
+    $(`.cat-h[data-h="${h.dataset.h}"]`).focus();
+  }));
+  $('#cat-all').addEventListener('click', () => setRange(Y0, Y1));
+
+  // ── Genres, type, tri, affichage, pastilles ──
+  $('.cat-genres').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-g]');
+    if (b) { f.genre = f.genre === b.dataset.g ? '' : b.dataset.g; update(); $(`.cat-gt[data-g="${CSS.escape(b.dataset.g)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); }
+  });
+  $('#cat-gall').addEventListener('click', () => { f.genre = ''; update(); });
+  // le genre choisi en arrivant (lien depuis l'accueil) est ramené dans la ligne
+  if (f.genre) requestAnimationFrame(() => { const t = $('.cat-gt[aria-pressed="true"]'); if (t) t.parentElement.scrollLeft = t.offsetLeft - 40; });
+  wrap.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-type], [data-sort], [data-mode], [data-clear]');
+    if (!t) return;
+    if (t.dataset.type !== undefined) f.type = t.dataset.type;
+    else if (t.dataset.sort) { reveal = t.dataset.sort === 'year' && f.sort !== 'year'; f.sort = t.dataset.sort; }
+    else if (t.dataset.mode) { mode = t.dataset.mode; try { localStorage.setItem('mpf-affichage', mode === 'list' ? 'liste' : 'affiches'); } catch (err) {} }
+    else clearFilter(t.dataset.clear);
+    update();
+  });
+  const clearFilter = (k) => {
+    if (k === 'years' || k === 'all') { f.from = ''; f.to = ''; }
+    if (k === 'genre' || k === 'all') f.genre = '';
+    if (k === 'q' || k === 'all') f.q = '';
+  };
+  $('#results').addEventListener('click', (e) => {
+    const p = e.target.closest('[data-play]');
+    if (p) { e.preventDefault(); e.stopPropagation(); return playItem(S.byKey.get(p.dataset.play)); }
+    const c = e.target.closest('[data-clear]');
+    if (c) { clearFilter(c.dataset.clear); update(); }
+  });
   update();
 };
 
