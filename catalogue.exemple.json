@@ -1,0 +1,74 @@
+{
+  "_lisezmoi": "Catalogue de Messi por favor. videoRef = chemin de la vidéo depuis la racine du disque. poster / backdrop / thumb = nom d'un fichier du dossier images. Une vidéo du disque absente d'ici s'affiche quand même, avec son nom de fichier. « ignorer » liste les vidéos à ne jamais afficher (doublons).",
+  "films": [
+    {
+      "id": "film-exemple-1",
+      "title": "Un film",
+      "year": "1999",
+      "section": "films",
+      "genres": ["Drame"],
+      "director": "Une réalisatrice",
+      "duration": "112",
+      "rating": "8.1",
+      "description": "Le résumé du film.",
+      "poster": "Un film-cover.jpg",
+      "backdrop": "Un film-backdrop.jpg",
+      "videoRef": "Un film.mp4",
+      "addedAt": 1793000000000
+    },
+    {
+      "id": "film-exemple-2",
+      "title": "Un film 2",
+      "year": "2004",
+      "section": "films",
+      "genres": ["Drame"],
+      "director": "Une réalisatrice",
+      "duration": "105",
+      "rating": "7.6",
+      "description": "La suite.",
+      "poster": "Un film 2-cover.jpg",
+      "backdrop": "Un film 2-backdrop.jpg",
+      "videoRef": "Un film 2.mp4",
+      "addedAt": 1793000000000
+    }
+  ],
+  "series": [
+    {
+      "id": "serie-exemple",
+      "title": "Une série",
+      "year": "2022",
+      "section": "series",
+      "genres": ["Comédie"],
+      "rating": "8.4",
+      "description": "Le résumé de la série.",
+      "poster": "Une série-cover.jpg",
+      "backdrop": "Une série-backdrop.jpg",
+      "addedAt": 1793000000000
+    }
+  ],
+  "episodes": [
+    {
+      "id": "episode-exemple-1",
+      "seriesId": "serie-exemple",
+      "season": 1,
+      "episode": 1,
+      "title": "Premier épisode",
+      "description": "Le résumé de l'épisode.",
+      "duration": "28 min",
+      "thumb": "Une série S01E01.jpg",
+      "videoRef": "Une série/Une série S01E01.mp4",
+      "addedAt": 1793000000000
+    }
+  ],
+  "collections": [
+    {
+      "id": "collection-exemple",
+      "title": "Les deux films",
+      "description": "Deux films à voir dans l'ordre.",
+      "director": "Une réalisatrice",
+      "backdrop": "Un film-backdrop.jpg",
+      "filmIds": ["film-exemple-1", "film-exemple-2"]
+    }
+  ],
+  "ignorer": []
+}
