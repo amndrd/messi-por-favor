@@ -204,21 +204,17 @@ const clampSynopsis = () => {
 };
 
 // ─── CARTES ───────────────────────────────────────────────────────────────────
-// Affiche : badge (nouveau, série…), progression ; au survol,
-// genres et durée glissent sur l'image.
+// Affiche : badge (série, anime…), progression ; un point vert pour les nouveautés.
+// Souris arrêtée dessus : l'aperçu s'ouvre (voir APERÇU AU SURVOL).
 const card = (it, { num } = {}) => {
   const pct = itemProgress(it);
-  const sub = it.kind === 'serie' ? seriesLine(it) : fmtShort(it.duration);
-  const badge = num ? `<span class="num">${num}</span>`
-    : isNew(it) ? '<span class="badge new">Nouveau</span>'
-    : it.type !== 'film' ? `<span class="badge">${TYPES[it.type]}</span>` : '';
-  return `<a class="cp" href="/${it.kind}/${esc(it.id)}" data-link>
+  const badge = num ? `<span class="num">${num}</span>` : it.type !== 'film' ? `<span class="badge">${TYPES[it.type]}</span>` : '';
+  return `<a class="cp" href="/${it.kind}/${esc(it.id)}" data-link data-key="${esc(it.key)}">
     <span class="im">${posterHtml(it.poster)}${badge}
-      <span class="ov">${it.genres.length ? `<span>${esc(it.genres.slice(0, 2).join(', '))}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</span>
       ${pct ? `<span class="prog"><i style="width:${pct}%"></i></span>` : ''}
     </span>
     <b>${esc(it.title)}</b>
-    <small>${esc(it.year)}${it.rating ? `<span class="r">${icon('star')}${fmtRating(it.rating)}</span>` : ''}</small>
+    <small>${isNew(it) ? '<i class="nw" title="Nouveau sur le disque"></i>' : ''}${esc(it.year)}${it.rating ? `<span class="r">${icon('star')}${fmtRating(it.rating)}</span>` : ''}</small>
   </a>`;
 };
 

@@ -245,28 +245,21 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: 11.5px; font-weight: 700; background: rgba(0,0,0,.6); display: inline-flex; align-items: center;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
-.cp .badge.new { background: #fff; color: #000; }
 .cp .num {
   position: absolute; z-index: 3; left: 10px; top: 10px; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 99px;
   display: grid; place-items: center; background: rgba(0,0,0,.62); border: 1px solid rgba(255,255,255,.2);
   font-weight: 700; font-size: 13px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
-.cp .ov {
-  position: absolute; inset: auto 0 0; z-index: 3; display: grid; gap: 2px; padding: 40px 12px 12px;
-  background: linear-gradient(0deg, rgba(0,0,0,.85), transparent); font-size: 12.5px; color: var(--body);
-  opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s;
-}
-.cp .ov span:first-child { color: #fff; font-weight: 600; }
-.cp .prog ~ .ov, .cp .ov:has(~ .prog) { padding-bottom: 22px; }
 .cp b { display: block; margin-top: 10px; font-weight: 600; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; }
 .cp small { display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 13px; margin-top: 1px; }
 .cp small .r { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cp small .r .ic { width: 12px; height: 12px; color: var(--gold); }
+/* point vert : nouveau sur le disque */
+.nw { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 9px; background: var(--green); box-shadow: 0 0 8px var(--green); margin-right: -2px; }
 .cp:hover .im, .cp:focus-visible .im {
   transform: translateY(-6px) scale(1.035);
   box-shadow: 0 24px 50px -16px rgba(var(--ct, 0,0,0), .9), inset 0 0 0 1px rgba(255,255,255,.25);
 }
-.cp:hover .ov, .cp:focus-visible .ov { opacity: 1; transform: none; }
 .cp:focus-visible .im { outline: 2px solid #fff; outline-offset: 3px; }
 
 /* Paysage : reprendre */
@@ -940,7 +933,6 @@ input, select, textarea { font: inherit; color: inherit; }
 @media (hover: none), (pointer: coarse) {
   .rail-btn { display: none; }
   .cp:hover .im { transform: none; box-shadow: inset 0 0 0 1px var(--line); }
-  .cp .ov { display: none; }
   .cl .pl { opacity: 1; transform: none; width: 34px; height: 34px; }
   .ep-play .ic { opacity: .95; transform: scale(.8); }
 }
