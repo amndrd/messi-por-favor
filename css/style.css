@@ -867,8 +867,9 @@ input, select, textarea { font: inherit; color: inherit; }
   body { font-size: 14px; }
   .header { grid-template-columns: auto 1fr auto; gap: 6px; padding: 10px 10px 0; }
   .nav { justify-self: center; height: 46px; padding: 4px; gap: 2px; }
-  .nav a { padding: 0 9px; font-size: 14px; }
-  .nav a .ic { display: none; }
+  /* seul l'onglet ouvert montre son nom, les autres gardent leur icône */
+  .nav a { padding: 0 11px; gap: 6px; font-size: 14px; }
+  .nav a:not(.active) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .logo { width: 46px; height: 46px; }
   .logo-face { height: 20px; }
   .hd-act { height: 46px; padding: 3px; }
@@ -931,7 +932,8 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 @media (max-width: 370px) {
   .nav-div { display: none; }
-  .nav a { padding: 0 7px; font-size: 13.5px; }
+  .nav a { padding: 0 9px; font-size: 13.5px; }
+  .hd-search, .hd-ic { width: 36px; height: 36px; }
   .logo { width: 42px; height: 42px; }
   .header { padding: 10px 8px 0; gap: 5px; }
 }

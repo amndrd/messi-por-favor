@@ -325,11 +325,11 @@ const routes = [
 
 // Onglet allumé dans le menu
 const setTab = () => {
-  const path = location.pathname, q = new URLSearchParams(location.search), type = q.get('type');
-  // « Catalogue » regroupe films, collections et le reste ; « Séries » a son propre onglet
+  const path = location.pathname;
+  // « Catalogue » regroupe films et séries ; « Collections » a son propre onglet
   const tab = path === '/' ? 'accueil'
-    : path.startsWith('/serie/') || (path.startsWith('/catalogue') && type === 'serie') ? 'series'
-    : /^\/(catalogue|collection|film\/)/.test(path) ? 'catalogue' : '';
+    : path.startsWith('/collection') ? 'collections'
+    : /^\/(catalogue|film\/|serie\/)/.test(path) ? 'catalogue' : '';
   $$('[data-tab]').forEach(a => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
