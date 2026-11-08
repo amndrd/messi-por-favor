@@ -1261,6 +1261,7 @@ $('#quit-btn').addEventListener('click', async () => {
 // ─── RECHERCHE RAPIDE (⌘K) ────────────────────────────────────────────────────
 const openPalette = () => {
   const pages = [['Accueil', '/'], ['Catalogue', '/catalogue'], ['Collections', '/collections'], ['Ma liste', '/catalogue?liste=1']];
+  const actions = window.mpfIntro ? [['Rejouer l\u2019intro', 'La taupe sort de son trou', () => window.mpfIntro()]] : [];
   const m = modal('', `<div class="palette-in">${icon('search')}
       <label class="sr-only" for="pal-in">Rechercher</label>
       <input id="pal-in" placeholder="Rechercher un film, une série, une page…" autocomplete="off" spellcheck="false">
@@ -1275,16 +1276,19 @@ const openPalette = () => {
     const titles = k ? S.items.filter(it => norm(it.title + ' ' + it.director).includes(k)).slice(0, 8) : [];
     const cols = k ? S.collections.filter(c => norm(c.title).includes(k)).slice(0, 3) : [];
     const pg = pages.filter(([l]) => !k || norm(l).includes(k));
+    const acts = actions.filter(([l]) => !k || norm(l + ' animation taupe').includes(k));
     entries = [
       ...titles.map(it => ({ href: `/${it.kind}/${it.id}`, label: it.title, small: [TYPES[it.type], it.year].filter(Boolean).join(' · ') })),
       ...cols.map(c => ({ href: `/collection/${c.id}`, label: c.title, small: `Collection · ${c.films.length} films` })),
       ...pg.map(([l, h]) => ({ href: h, label: l, small: h })),
+      ...acts.map(([l, sm, run]) => ({ run, label: l, small: sm })),
     ];
     sel = Math.max(0, Math.min(sel, entries.length - 1));
     let html = '', i = 0;
     if (titles.length) html += `<p class="label">Titres</p>` + titles.map(() => item(i++)).join('');
     if (cols.length) html += `<p class="label">Collections</p>` + cols.map(() => item(i++)).join('');
     if (pg.length) html += `<p class="label">Naviguer</p>` + pg.map(() => item(i++)).join('');
+    if (acts.length) html += `<p class="label">Animation</p>` + acts.map(() => item(i++)).join('');
     if (!entries.length) html = `<p class="label">Aucun résultat sur ce disque</p>`;
     listEl.innerHTML = html;
   };
@@ -1292,6 +1296,7 @@ const openPalette = () => {
   const pick = (i) => {
     const en = entries[i]; if (!en) return;
     closeModal();
+    if (en.run) return en.run();
     go(en.href);
   };
   input.addEventListener('input', () => { sel = 0; draw(); });

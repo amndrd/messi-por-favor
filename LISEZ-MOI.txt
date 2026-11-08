@@ -5,6 +5,8 @@ POUR REGARDER
 1. Branche le disque sur un Mac.
 2. Double-clique sur « ▶ Messi por favor », tout en haut du disque.
 3. Le site s'ouvre dans le navigateur. Pas de compte, pas besoin d'internet.
+   Une petite intro (la taupe sort de son trou) se joue à l'ouverture :
+   un clic ou une touche la passe.
 
 La première fois, le Mac demande si « Messi por favor » peut accéder aux
 fichiers d'un volume amovible : clique sur « Autoriser ».
