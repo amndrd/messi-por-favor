@@ -80,14 +80,13 @@
   const wob = (t, t0, amp, hz, tau) => t < t0 ? 0 : amp * Math.exp(-(t - t0) / tau) * Math.sin(2 * Math.PI * hz * (t - t0) / 1000);
 
   /* ---------- chronologie (ms) ---------- */
-  const T = { draw: [180, 1020], shake: 1040, peek: [1280, 1520], dip: [1520, 1700], pop: 1700, twitch: 2120, heat: 2700, burst: 3100 };
+  const T = { draw: [180, 1020], shake: 1040, pop: 1300, twitch: 1720, heat: 2300, burst: 2700 };
+  const SH = 400; // la sortie arrive 0,4 s plus tôt qu'avant (plus de mèche qui pointe ni d'élan)
   const FADE = [T.burst + 500, T.burst + 850];
   const TOTAL = T.burst + 1350;   // les derniers grains finissent leur vol au-dessus du site
   function moleY(t) {
-    if (t < T.peek[0]) return 300;
-    if (t < T.peek[1]) return lerp(300, 232, E.outCubic(prog(t, ...T.peek)));
-    if (t < T.dip[1]) return lerp(232, 252, E.inOutSine(prog(t, ...T.dip)));
-    return spring(t - T.pop, 252, 0, 2.05, .46, -1150);
+    if (t < T.pop) return 300;                       // cachée dans le trou
+    return spring(t - T.pop, 300, 0, 2.05, .5, -700);  // elle sort d'un seul jet
   }
   const moleV = (t) => (moleY(t + 4) - moleY(t - 4)) / 8 * 1000;
 
@@ -104,7 +103,7 @@
     p.style.strokeDasharray = '1 2';
     track(p, (t) => ({ strokeDashoffset: 1 - E.inOutQuint(prog(t, ...T.draw)), opacity: t < T.draw[0] ? 0 : 1 }));
   });
-  for (const id of ['i-ringB', 'i-ringF']) track($(id), (t) => ({ transform: `translate(${wob(t, T.shake, 2.6, 26, 110) + wob(t, T.dip[0] + 40, 1.2, 30, 70)}px,0)` }));
+  for (const id of ['i-ringB', 'i-ringF']) track($(id), (t) => ({ transform: `translate(${wob(t, T.shake, 2.6, 26, 110)}px,0)` }));
   /* la taupe sort, s'étire avec la vitesse, chauffe et gonfle avant d'exploser */
   track($('i-mole'), (t) => ({ transform: `translate(0px,${moleY(t)}px)` }));
   origin($('i-squash'), 200, 330);
@@ -116,7 +115,7 @@
   });
   for (const id of ['i-body', 'i-halo', 'i-rest']) track($(id), (t) => ({ opacity: t < T.burst ? 1 : 0 }));
   origin($('i-hair'), 200, 99);
-  track($('i-hair'), (t) => ({ opacity: t < T.burst ? 1 : 0, transform: `rotate(${wob(t, T.peek[0] + 60, 13, 4.4, 230) + wob(t, T.pop + 90, 17, 3.7, 270)}deg) scale(1,${1 + wob(t, T.pop + 40, .28, 3.2, 190)})` }));
+  track($('i-hair'), (t) => ({ opacity: t < T.burst ? 1 : 0, transform: `rotate(${wob(t, T.pop + 90, 17, 3.7, 270)}deg) scale(1,${1 + wob(t, T.pop + 40, .28, 3.2, 190)})` }));
   /* les lunettes suivent avec un temps de retard, puis tombent dans le trou */
   origin($('i-glasses'), 200, 194);
   track($('i-glasses'), (t) => {
@@ -140,6 +139,7 @@
   [[100, 318, 26, 344, 11, 76, 1765, 570, -170, 3], [104, 320, 58, 368, 7.5, 52, 1795, 500, 130, 7], [112, 321, 104, 378, 4.5, 32, 1820, 420, -90, 11], [108, 320, 10, 366, 3.5, 60, 1850, 560, 60, 13],
    [300, 318, 372, 341, 10, 72, 1775, 570, 160, 5], [296, 320, 344, 366, 6.5, 48, 1805, 480, -110, 9], [290, 321, 304, 379, 4, 28, 1835, 400, 80, 17], [294, 320, 392, 362, 3, 56, 1860, 540, -70, 19]]
     .forEach(([x0, y0, x1, y1, r, h, t0, D, spin, seed]) => {
+      t0 -= SH;
       const g = el('g', {}, $('i-clods')), s = el('g', {}, g);
       el('path', { d: blob(r, seed), fill: W }, s);
       track(g, (t) => {
@@ -151,7 +151,7 @@
     });
   for (let i = 0; i < 12; i++) {
     const side = i % 2 ? 1 : -1, k = (i >> 1) / 5, x0 = 200 + side * (40 + k * 85), y0 = 330 + 6 * (1 - k);
-    const dx = side * (18 + k * 34), dy = -(26 + (1 - k) * 34 + (i % 3) * 8), t0 = 1720 + (i % 4) * 14, D = 360 + (i % 3) * 70;
+    const dx = side * (18 + k * 34), dy = -(26 + (1 - k) * 34 + (i % 3) * 8), t0 = 1720 - SH + (i % 4) * 14, D = 360 + (i % 3) * 70;
     const c = el('circle', { cx: 0, cy: 0, r: 1.6 + (i % 3) * .6, fill: W }, $('i-clods'));
     track(c, (t) => {
       const q = clamp((t - t0) / D, 0, 1);
@@ -193,6 +193,7 @@
     removeEventListener('keydown', skip, true);
   }
   function skip(e) { if (e && e.type === 'keydown' && e.key === 'Tab') return; anims.forEach((a) => a.finish()); end(); }
+  play.anims = anims; // pour enregistrer une vidéo image par image
   anims[0].finished.then(end, end);
   ov.addEventListener('pointerdown', skip);
   addEventListener('keydown', skip, true);
