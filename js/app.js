@@ -2,7 +2,7 @@
    Messi por favor — interface (version disque dur)
    Accueil, catalogue, collections, fiches et lecteur. Le catalogue vient du
    serveur (/api/data) : seulement ce qui est sur le disque. Pas de compte ;
-   la progression et « Ma liste » sont gardées sur le disque.
+   la progression est gardée sur le disque.
    ══════════════════════════════════════════════════════════════════════════ */
 (() => {
 'use strict';
@@ -30,8 +30,8 @@ const api = async (url, body) => {
 
 // ─── DONNÉES ──────────────────────────────────────────────────────────────────
 const S = {
-  episodes: [], progress: {}, myList: [],
-  items: [], byKey: new Map(), // films et séries, dans un format commun
+  episodes: [], progress: {},
+  items: [], byKey: new Map(), newKeys: new Set(), // films et séries, dans un format commun
   collections: [],
 };
 
@@ -58,7 +58,6 @@ const toItem = (o, kind) => {
 const loadData = (d) => {
   S.episodes = d.episodes || [];
   S.progress = d.progress || {};
-  S.myList   = d.myList || [];
   const items = [
     ...(d.films || []).map(m => toItem(m, 'film')),
     ...(d.series || []).map(s => toItem(s, 'serie')),
@@ -73,6 +72,8 @@ const loadData = (d) => {
   }
   S.items = items;
   S.byKey = new Map(items.map(it => [it.key, it]));
+  S.newKeys = new Set(items.filter(it => it.addedAt > 0 && Date.now() - it.addedAt < 21 * 864e5)
+    .sort((a, b) => b.addedAt - a.addedAt).slice(0, 12).map(it => it.key));
   // Collections : années, réalisateurs et durée totale déduits de leurs films
   S.collections = (d.collections || []).map(c => {
     const films = (c.filmIds || []).map(id => S.byKey.get('film:' + id)).filter(Boolean);
@@ -91,8 +92,6 @@ const loadData = (d) => {
 const episodesOf = (seriesId) => S.episodes
   .filter(e => e.seriesId === seriesId)
   .sort((a, b) => (a.season || 1) - (b.season || 1) || (a.episode || 0) - (b.episode || 0));
-
-const inMyList = (it) => S.myList.some(x => x.kind === it.kind && x.id === it.id);
 
 // Pourcentage déjà vu d'un film, ou de l'épisode en cours d'une série
 const progressPct = (contentId) => {
@@ -121,10 +120,71 @@ const epLabel = (e, it) => (it?.noSeason ? '' : `S${e.season || 1} `) + `E${pad2
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // ─── MORCEAUX D'INTERFACE ─────────────────────────────────────────────────────
-const placeholder = () => `<div class="ph" aria-hidden="true"><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><span class="ph-ring">${icon('film', '')}</span></div>`;
-// L'affiche apparaît en fondu par-dessus le motif ; si elle manque, le motif reste
+// Motif discret tant que l'image n'est pas chargée (il reste si elle manque)
+const placeholder = () => `<span class="ph" aria-hidden="true">${icon('film', '')}</span>`;
+// L'image apparaît en fondu par-dessus le motif ; si elle manque, le motif reste
 const imgTag = (src) => src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="this.remove()">` : '';
 const posterHtml = (src) => placeholder() + imgTag(src);
+const bgUrl = (src) => `url(&quot;${esc(String(src).replace(/"/g, '%22'))}&quot;)`;
+const logoFace = () => $('.header .logo-face')?.outerHTML || '';
+
+// Note sur 10 à la française (8,6) ; durée courte (2 h 03) ; ce qu'il reste à voir
+const fmtRating = (r) => r ? r.toFixed(1).replace('.', ',') : '';
+const fmtShort = (d) => {
+  d = String(d || '').trim();
+  if (!/^\d+$/.test(d)) return d;
+  const m = parseInt(d, 10);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${pad2(m % 60)}` : `${m} min`;
+};
+const fmtLeft = (sec) => 'encore ' + fmtShort(Math.max(1, Math.round(sec / 60)));
+const seriesLine = (it) => `${it.seasonCount > 1 ? it.seasonCount + ' saisons, ' : ''}${it.epCount} épisode${it.epCount > 1 ? 's' : ''}`;
+// « Nouveau » : parmi les 12 derniers arrivés, et depuis moins de trois semaines
+// (après un gros import, le badge resterait sinon sur la moitié du catalogue)
+const isNew = (it) => !!it && S.newKeys.has(it.key);
+
+// Méta-données d'un titre : la note en jaune, puis année, durée…, puis les genres
+const metaHtml = (rating, parts, tags = []) =>
+  (rating ? `<span class="rate">${icon('star')}${fmtRating(rating)}</span>` : '') +
+  parts.filter(Boolean).map(p => `<span>${esc(p)}</span>`).join('<span class="sep" aria-hidden="true"></span>') +
+  tags.map(g => `<span class="tag">${esc(g)}</span>`).join('');
+
+// Taille du grand titre selon sa longueur
+const titleSize = (t) => t.length > 26 ? ' xl' : t.length > 15 ? ' l' : '';
+
+// ─── COULEUR D'UNE IMAGE ──────────────────────────────────────────────────────
+// La couleur dominante d'une image (les tons vifs et clairs comptent plus), ramenée
+// à une même luminosité : elle teinte les reflets autour de la grande image et des cartes.
+const tints = new Map();
+const tintOf = (img) => {
+  const src = img.currentSrc || img.src;
+  if (tints.has(src)) return tints.get(src);
+  let out = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 24; c.height = 16;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, 24, 16);
+    const d = g.getImageData(0, 0, 24, 16).data;
+    let r = 0, gr = 0, b = 0, w = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]);
+      const k = (mx - mn) / 255 * (mx / 255) + .02;
+      r += d[i] * k; gr += d[i + 1] * k; b += d[i + 2] * k; w += k;
+    }
+    const rgb = [r / w, gr / w, b / w], f = 190 / (Math.max(...rgb) || 1);
+    out = rgb.map(v => Math.round(Math.min(255, v * f))).join(',');
+  } catch (e) {}
+  tints.set(src, out);
+  return out;
+};
+const whenLoaded = (img, fn) => { if (img.complete && img.naturalWidth) fn(); else img.addEventListener('load', fn, { once: true }); };
+// La couleur d'une affiche colore son ombre au survol
+view.addEventListener('pointerover', (e) => {
+  const c = e.target.closest?.('.cp');
+  if (!c || c.dataset.tinted) return;
+  c.dataset.tinted = '1';
+  const img = $('.im img', c);
+  if (img) whenLoaded(img, () => { const t = tintOf(img); if (t) c.style.setProperty('--ct', t); });
+});
 
 // Résumé replié après quelques lignes ; « Voir plus » seulement s'il dépasse
 const clampSynopsis = () => {
@@ -133,7 +193,7 @@ const clampSynopsis = () => {
   p.classList.add('clamp');
   if (p.scrollHeight - p.clientHeight < 4) { p.classList.remove('clamp'); return; }
   const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'more-btn label';
+  btn.type = 'button'; btn.className = 'more-btn';
   btn.textContent = 'Voir plus'; btn.setAttribute('aria-expanded', 'false');
   btn.addEventListener('click', () => {
     const open = !p.classList.toggle('clamp');
@@ -143,44 +203,98 @@ const clampSynopsis = () => {
   p.after(btn);
 };
 
-const card = (it) => {
+// ─── CARTES ───────────────────────────────────────────────────────────────────
+// Affiche : badge (nouveau, série…), progression ; au survol,
+// genres et durée glissent sur l'image.
+const card = (it, { num } = {}) => {
   const pct = itemProgress(it);
-  const line = it.kind === 'serie'
-    ? `${it.seasonCount > 1 ? it.seasonCount + ' saisons · ' : ''}${it.epCount} épisode${it.epCount > 1 ? 's' : ''}`
-    : fmtDuration(it.duration);
-  return `<a class="card" href="/${it.kind}/${esc(it.id)}" data-link>
-    <div class="poster">
-      ${posterHtml(it.poster)}
-      <span class="tag">${TYPES[it.type]}</span>
-      <div class="peek" aria-hidden="true">
-        ${it.director ? `<p class="peek-by">${esc(it.director)}</p>` : ''}
-        ${line ? `<div class="peek-line">${it.year ? `<span class="box">${esc(it.year)}</span>` : ''}<span>${esc(line)}</span></div>` : ''}
-        ${it.description ? `<p class="peek-desc">${esc(it.description)}</p>` : ''}
-      </div>
-      ${it.rating ? `<span class="score">${icon('star')}${it.rating.toFixed(1)}/10</span>` : ''}
-      ${pct ? `<div class="prog"><i style="width:${pct}%"></i></div>` : ''}
-    </div>
-    <div class="card-meta"><span class="card-title">${esc(it.title)}</span>${it.year ? `<span class="card-year">${esc(it.year)}</span>` : ''}</div>
-    ${it.genres.length ? `<p class="card-genres">${esc(it.genres.slice(0, 2).join(' · '))}</p>` : ''}
+  const sub = it.kind === 'serie' ? seriesLine(it) : fmtShort(it.duration);
+  const badge = num ? `<span class="num">${num}</span>`
+    : isNew(it) ? '<span class="badge new">Nouveau</span>'
+    : it.type !== 'film' ? `<span class="badge">${TYPES[it.type]}</span>` : '';
+  return `<a class="cp" href="/${it.kind}/${esc(it.id)}" data-link>
+    <span class="im">${posterHtml(it.poster)}${badge}
+      <span class="ov">${it.genres.length ? `<span>${esc(it.genres.slice(0, 2).join(', '))}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</span>
+      ${pct ? `<span class="prog"><i style="width:${pct}%"></i></span>` : ''}
+    </span>
+    <b>${esc(it.title)}</b>
+    <small>${esc(it.year)}${it.rating ? `<span class="r">${icon('star')}${fmtRating(it.rating)}</span>` : ''}</small>
   </a>`;
 };
 
-const row = (title, items, more) => items.length ? `<section class="row">
-    <div class="row-head"><h2 class="display">${esc(title)}</h2>${more ? `<a class="link-u" href="${more}" data-link>Voir tout →</a>` : ''}</div>
-    <div class="grid">${items.map(card).join('')}</div>
-  </section>` : '';
+// Paysage : reprendre là où on s'est arrêté (un clic sur l'image relance la vidéo)
+const resumeCard = ({ it, ep, p }) => {
+  const img = (ep && imgUrl(ep.thumb)) || it.backdrop || it.poster;
+  const pct = p.duration ? Math.min(100, p.ts / p.duration * 100) : 0;
+  const sub = ep ? `${epLabel(ep, it)}${ep.title ? ', ' + ep.title : ''}` : [it.year, fmtShort(it.duration)].filter(Boolean).join(', ');
+  return `<div class="cl">
+    <button class="im" type="button" data-resume="${esc(it.key)}" aria-label="Reprendre ${esc(it.title)}">${placeholder()}${imgTag(img)}
+      <span class="left">${fmtLeft(p.duration - p.ts)}</span><span class="pb"><i style="width:${pct}%"></i></span><span class="pl">${icon('play')}</span></button>
+    <a href="/${it.kind}/${esc(it.id)}" data-link><b>${esc(it.title)}</b></a><small>${esc(sub)}</small>
+  </div>`;
+};
 
-const searchBar = (value = '') => `<form class="searchbar" role="search" id="search-form">
-    <label class="label" for="search-input">Rechercher</label>
+// Classement : grand chiffre détouré derrière l'affiche
+const rankCard = (it, k) => `<a class="ck" href="/${it.kind}/${esc(it.id)}" data-link aria-label="${k + 1}. ${esc(it.title)}">
+    <span class="n" aria-hidden="true">${k + 1}</span><span class="im">${posterHtml(it.poster)}</span></a>`;
+
+// Collection : son image floutée en fond, trois affiches en éventail
+const FAN = [[0, 14, -8], [48, 0, 2], [96, 18, 10]];
+const colCard = (c) => `<a class="cc" href="/collection/${esc(c.id)}" data-link>
+    ${c.backdrop ? `<span class="bg" style="background-image:${bgUrl(c.backdrop)}"></span>` : ''}
+    <span class="fan" aria-hidden="true">${c.films.slice(0, 3).map((f, j) => f.poster
+      ? `<img src="${esc(f.poster)}" alt="" loading="lazy" style="left:${FAN[j][0]}px;top:${FAN[j][1]}px;transform:rotate(${FAN[j][2]}deg);z-index:${j === 1 ? 3 : 2}">` : '').join('')}</span>
+    <span class="t"><small>${c.films.length} films${c.years ? ', ' + esc(c.years) : ''}</small><h3>${esc(c.title)}</h3></span>
+  </a>`;
+
+// Genre : la plus belle image du genre, teintée d'une couleur qui lui est propre
+const GENRE_TINT = {
+  'Drame': '92,58,40', 'Thriller': '96,22,30', 'Crime': '120,90,24', 'Action': '150,60,20', 'Comédie': '170,120,20',
+  'Romance': '150,50,90', 'Science-Fiction': '30,60,130', 'Aventure': '30,100,90', 'Historique': '110,80,50',
+  'Mystère': '60,40,110', 'Guerre': '70,80,50', 'Documentaire': '40,90,60', 'Horreur': '110,10,20',
+  'Fantastique': '90,50,130', 'Musique': '140,40,120', 'Western': '140,80,30', 'Animation': '40,110,70',
+};
+const genreTiles = () => {
+  const counts = new Map();
+  S.items.forEach(it => it.genres.forEach(g => counts.set(g, (counts.get(g) || 0) + 1)));
+  const used = new Set(), best = (list) => list.filter(it => it.backdrop && !used.has(it)).sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
+  return [...counts].filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]).map(([g, n]) => {
+    const pick = best(S.items.filter(it => it.genres[0] === g)) || best(S.items.filter(it => it.genres.includes(g)));
+    if (pick) used.add(pick);
+    return `<a class="cg" href="/catalogue?genre=${encodeURIComponent(g)}" data-link style="--gt:${GENRE_TINT[g] || '60,60,72'}">
+      ${pick ? `<img src="${esc(pick.backdrop)}" alt="" loading="lazy">` : ''}<b>${esc(g)}</b><small>${n} titre${n > 1 ? 's' : ''}</small></a>`;
+  }).join('');
+};
+
+// ─── RANGÉES ──────────────────────────────────────────────────────────────────
+// Rangée qui défile de côté ; des flèches apparaissent au survol (souris)
+const rail = (html) => `<div class="rail-wrap">
+    <button class="rail-btn prev" type="button" aria-label="Précédents" tabindex="-1" hidden>${icon('left')}</button>
+    <div class="rail">${html}</div>
+    <button class="rail-btn next" type="button" aria-label="Suivants" tabindex="-1" hidden>${icon('right')}</button></div>`;
+const rowHead = (title, sub = '', more = '') => `<div class="rh"><h2>${esc(title)}</h2>${sub ? `<span>${esc(sub)}</span>` : ''}${more ? `<a href="${more}" data-link>Tout voir</a>` : ''}</div>`;
+const row = (title, items, more, { sub = '', html = '' } = {}) => (html || items.length)
+  ? `<section class="row">${rowHead(title, sub, more)}${rail(html || items.map(it => card(it)).join(''))}</section>` : '';
+const initRails = () => $$('.rail-wrap', view).forEach(w => {
+  const r = $('.rail', w), prev = $('.prev', w), next = $('.next', w);
+  const paint = () => { prev.hidden = r.scrollLeft < 8; next.hidden = r.scrollLeft + r.clientWidth > r.scrollWidth - 8; };
+  const by = (dir) => r.scrollBy({ left: dir * Math.max(200, r.clientWidth - 160), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  prev.addEventListener('click', () => by(-1));
+  next.addEventListener('click', () => by(1));
+  r.addEventListener('scroll', paint, { passive: true });
+  new ResizeObserver(paint).observe(r);
+});
+
+const searchBar = (value = '') => `<form class="search" role="search" id="search-form">
+    ${icon('search')}<label class="sr-only" for="search-input">Rechercher dans le catalogue</label>
     <input id="search-input" name="q" type="search" autocomplete="off" spellcheck="false" value="${esc(value)}" placeholder="${esc(examplePlaceholder())}">
-    <button class="btn-red" type="submit">Chercher →</button>
   </form>`;
 
 // Un titre du catalogue en exemple dans la barre de recherche
 const examplePlaceholder = () => {
   const pool = S.items.filter(it => it.poster);
   const it = pool[Math.floor(Math.random() * pool.length)];
-  return it ? [it.title, it.year, TYPES[it.type]].filter(Boolean).join(' · ') : 'Titre, réalisateur, genre…';
+  return it ? `Titre, réalisateur, acteur… (« ${it.title} »)` : 'Titre, réalisateur, acteur…';
 };
 let placeholderTimer = null;
 const rotatePlaceholder = () => {
@@ -192,6 +306,14 @@ const rotatePlaceholder = () => {
   }, 3500);
 };
 
+// ─── ACTIONS COMMUNES ─────────────────────────────────────────────────────────
+// Lecture : le film, ou l'épisode en cours de la série (sinon le premier)
+const playItem = (it) => {
+  if (it.kind === 'film') return openPlayer(it, null);
+  const eps = episodesOf(it.id);
+  if (!eps.length) return toast('Les épisodes ne sont pas encore disponibles');
+  openPlayer(it, currentEpisode(it.id) || eps[0]);
+};
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 const routes = [
   [/^\/$/,                 () => viewHome()],
@@ -201,22 +323,43 @@ const routes = [
   [/^\/(film|serie)\/([\w-]+)$/, (kind, id) => viewTitle(kind, id)],
 ];
 
+// Onglet allumé dans le menu
+const setTab = () => {
+  const path = location.pathname, q = new URLSearchParams(location.search), type = q.get('type');
+  // « Catalogue » regroupe films, collections et le reste ; « Séries » a son propre onglet
+  const tab = path === '/' ? 'accueil'
+    : path.startsWith('/serie/') || (path.startsWith('/catalogue') && type === 'serie') ? 'series'
+    : /^\/(catalogue|collection|film\/)/.test(path) ? 'catalogue' : '';
+  $$('[data-tab]').forEach(a => {
+    a.classList.toggle('active', a.dataset.tab === tab);
+    if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  // La pilule blanche glisse sous l'onglet ouvert
+  const nav = $('.nav'), ind = $('.nav-ind'), on = $('.nav a.active');
+  if (on) { ind.style.width = on.offsetWidth + 'px'; ind.style.transform = `translateX(${on.offsetLeft}px)`; ind.style.opacity = 1; }
+  else ind.style.opacity = 0;
+  if (!nav.classList.contains('ready')) requestAnimationFrame(() => requestAnimationFrame(() => nav.classList.add('ready')));
+};
+addEventListener('resize', setTab);
+document.fonts?.ready.then(setTab);
+
+// En-tête transparent sur la grande image, opaque dès qu'on descend
+const header = $('#header');
+const paintHeader = () => header.classList.toggle('solid', scrollY > 40);
+addEventListener('scroll', paintHeader, { passive: true });
+
 const render = () => {
   if (!$('#player').hidden) closePlayer();
-  closeMenus();
+  stopHero();
   closeOpenDD = null;
   const path = location.pathname;
   for (const [re, fn] of routes) {
     const m = path.match(re);
     if (!m) continue;
     fn(...m.slice(1));
-    const liste = new URLSearchParams(location.search).get('liste') === '1';
-    const tab = path.startsWith('/catalogue') ? (liste ? 'liste' : 'catalogue')
-      : path.startsWith('/collection') ? 'collections' : path === '/' ? 'accueil' : '';
-    $$('[data-tab]').forEach(a => {
-      a.classList.toggle('active', a.dataset.tab === tab);
-      if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-    });
+    setTab();
+    initRails();
+    paintHeader();
     return;
   }
   go('/', { replace: true });
@@ -250,40 +393,118 @@ const bindSearch = (onInput) => {
 };
 
 // ─── ACCUEIL ──────────────────────────────────────────────────────────────────
-const latest = (type, n = 6) => S.items.filter(it => it.type === type).sort((a, b) => b.addedAt - a.addedAt).slice(0, n);
-
-const viewHome = () => {
-  document.title = 'Messi por favor';
-  // Reprendre : le dernier contenu commencé de chaque titre
-  const seen = new Set(), resume = [];
+// Ce qu'on regardait : le dernier contenu commencé de chaque titre
+const resumeEntries = () => {
+  const seen = new Set(), out = [];
   Object.entries(S.progress).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0)).forEach(([id, p]) => {
     const ep = p.seriesId ? S.episodes.find(e => e.id === id) : null;
     const it = ep ? S.byKey.get('serie:' + ep.seriesId) : S.byKey.get('film:' + id);
-    if (it && !seen.has(it.key)) { seen.add(it.key); resume.push(it); }
+    if (it && p.duration && !seen.has(it.key)) { seen.add(it.key); out.push({ it, ep, p }); }
   });
-  const films = latest('film'), series = latest('serie'), animes = latest('anime'), animation = latest('animation');
-  const mine = S.myList.map(x => S.byKey.get(x.kind + ':' + x.id)).filter(Boolean).slice(0, 6);
+  return out;
+};
 
-  view.innerHTML = `<div class="wrap">
-    <section class="home-top">
-      ${searchBar()}
-      <div class="quick">
-        <span class="label">Filtres rapides :</span>
-        <a href="/catalogue?type=film" data-link>Films</a>
-        <a href="/catalogue?type=serie" data-link>Séries</a>
-        <a href="/catalogue?type=anime" data-link>Animes</a>
-        <a href="/catalogue?type=animation" data-link>Animation</a>
-        <a href="/catalogue?liste=1" data-link>Ma liste</a>
-      </div>
-    </section>
-    ${row('Reprendre', resume.slice(0, 6), null)}
-    ${row('Derniers films', films, '/catalogue?type=film')}
-    ${row('Dernières séries', series, '/catalogue?type=serie')}
-    ${row('Derniers animes', animes, '/catalogue?type=anime')}
-    ${row('Derniers films d\'animation', animation, '/catalogue?type=animation')}
-    ${row('Ma liste', mine, '/catalogue?liste=1')}
-  </div>`;
-  bindSearch();
+// Une sélection qui change chaque jour mais reste la même toute la journée
+const dayPick = (list, n) => {
+  let s = Math.floor(Date.now() / 864e5) % 233280;
+  const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.slice(0, n);
+};
+
+// La grande image : ce qu'on regardait, le dernier arrivé, puis la sélection du jour
+let heroTimer = null;
+const stopHero = () => { clearTimeout(heroTimer); heroTimer = null; };
+const HERO_MS = 8000;
+
+const heroCopy = ({ it }) => {
+  return `<h1 class="hero-title${titleSize(it.title)}">${esc(it.title)}</h1>
+    <div class="meta">${metaHtml(it.rating, [it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it), it.director], it.genres.slice(0, 2))}</div>
+    ${it.description ? `<p class="syn">${esc(it.description)}</p>` : ''}
+    <div class="cta">
+      <button class="btn play" type="button" data-hero="play">${icon('play')}${itemProgress(it) ? 'Reprendre' : 'Lecture'}</button>
+      <a class="btn glass sq" href="/${it.kind}/${esc(it.id)}" data-link aria-label="Plus d'infos sur ${esc(it.title)}" title="Plus d'infos">${icon('info')}</a>
+    </div>`;
+};
+
+const initHero = (picks) => {
+  const hero = $('#hero');
+  if (!hero) return;
+  const slides = $$('.slide', hero), copy = $('#hero-copy'), thumbs = $$('.th', hero);
+  let cur = -1, hold = false, startedAt = 0, left = HERO_MS;
+  const show = (k) => {
+    cur = k;
+    slides.forEach((s, j) => s.classList.toggle('on', j === k));
+    thumbs.forEach((t, j) => { t.classList.toggle('on', j === k); t.setAttribute('aria-pressed', j === k); });
+    copy.innerHTML = heroCopy(picks[k]);
+    copy.classList.remove('swap'); void copy.offsetWidth; copy.classList.add('swap');
+    const img = $('img', slides[k]);
+    if (img) whenLoaded(img, () => { const t = cur === k && tintOf(img); if (t) hero.style.setProperty('--tint', t); });
+  };
+  const arm = (ms) => {
+    stopHero();
+    if (picks.length < 2) return;
+    startedAt = Date.now(); left = ms;
+    heroTimer = setTimeout(() => goSlide((cur + 1) % picks.length), ms);
+  };
+  const goSlide = (k) => { show(k); if (hold) { stopHero(); left = HERO_MS; } else arm(HERO_MS); };
+  thumbs.forEach((t, j) => t.addEventListener('click', () => goSlide(j)));
+  // Le défilement fait une pause quand la souris est sur le texte ou les boutons
+  copy.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'mouse' || hold) return;
+    hold = true; left -= Date.now() - startedAt; stopHero(); hero.classList.add('hold');
+  });
+  copy.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'mouse' || !hold) return;
+    hold = false; hero.classList.remove('hold'); arm(Math.max(600, left));
+  });
+  copy.addEventListener('click', (e) => {
+    if (e.target.closest('[data-hero="play"]')) playItem(picks[cur].it);
+  });
+  goSlide(0);
+};
+
+const viewHome = () => {
+  document.title = 'Messi por favor';
+  const resume = resumeEntries();
+  const byRecent = S.items.slice().sort((a, b) => b.addedAt - a.addedAt);
+  const byRating = S.items.filter(it => it.rating).sort((a, b) => b.rating - a.rating);
+
+  const picks = [];
+  // (sans bulle au-dessus du titre)
+  const pick = (it) => { if (it && it.backdrop && !picks.some(p => p.it === it)) picks.push({ it }); };
+  if (resume[0]) pick(resume[0].it);
+  pick(byRecent[0]);
+  dayPick(S.items.filter(it => it.backdrop && (it.rating || 0) >= 7.8 && !picks.some(p => p.it === it)), 5 - picks.length).forEach(pick);
+
+  const series = S.items.filter(it => it.kind === 'serie').sort((a, b) => b.addedAt - a.addedAt);
+  const anim = S.items.filter(it => it.type === 'anime' || it.type === 'animation').sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const classics = S.items.filter(it => it.kind === 'film' && parseInt(it.year, 10) < 1980).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 18);
+
+  view.innerHTML = `${picks.length ? `<section class="hero" id="hero" aria-label="À l'affiche">
+      ${picks.map((p, k) => `<div class="slide${k ? '' : ' on'}"><img src="${esc(p.it.backdrop)}" alt=""${k ? '' : ' fetchpriority="high"'}></div>`).join('')}
+      <div class="glow" aria-hidden="true"></div>
+      <div class="hero-copy" id="hero-copy"></div>
+      ${picks.length > 1 ? `<div class="hero-next" role="group" aria-label="À l'affiche">${picks.map((p, k) =>
+        `<button class="th" type="button" aria-pressed="false" aria-label="${esc(p.it.title)}"><span class="im"><img src="${esc(p.it.backdrop)}" alt=""><i class="bar"></i></span><span class="nm">${esc(p.it.title)}</span></button>`).join('')}</div>` : ''}
+    </section>` : '<div class="hero-spacer"></div>'}
+    <div class="rows">
+      ${row('Reprendre', [], null, { sub: 'là où tu t\'es arrêté', html: resume.slice(0, 12).map(resumeCard).join('') })}
+      ${row('Nouveautés sur le disque', byRecent.slice(0, 18), '/catalogue')}
+      ${row('Les mieux notés', [], '/catalogue?tri=rating', { html: byRating.slice(0, 10).map(rankCard).join('') })}
+      ${row('Collections', [], '/collections', { html: S.collections.map(colCard).join('') })}
+      ${row('Séries', series.slice(0, 18), '/catalogue?type=serie')}
+      ${row('Par genre', [], null, { html: genreTiles() })}
+      ${row('Les classiques', classics, '/catalogue?a=1979&tri=rating', { sub: 'avant 1980' })}
+      ${row('Animation et animes', anim, null)}
+    </div>`;
+
+  initHero(picks);
+  view.querySelector('.rows').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-resume]');
+    if (b) playItem(S.byKey.get(b.dataset.resume));
+  });
 };
 
 // ─── CATALOGUE ────────────────────────────────────────────────────────────────
@@ -291,12 +512,12 @@ const SORTS = { recent: 'Ajout récent', title: 'Titre (A → Z)', newest: 'Sort
 
 const readFilters = () => {
   const q = new URLSearchParams(location.search);
-  return { q: q.get('q') || '', type: q.get('type') || '', genre: q.get('genre') || '', from: q.get('de') || '', to: q.get('a') || '', sort: SORTS[q.get('tri')] ? q.get('tri') : 'recent', liste: q.get('liste') === '1' };
+  return { q: q.get('q') || '', type: q.get('type') || '', genre: q.get('genre') || '', from: q.get('de') || '', to: q.get('a') || '', sort: SORTS[q.get('tri')] ? q.get('tri') : 'recent' };
 };
 const writeFilters = (f) => {
   const q = new URLSearchParams();
   if (f.q) q.set('q', f.q); if (f.type) q.set('type', f.type); if (f.genre) q.set('genre', f.genre);
-  if (f.from) q.set('de', f.from); if (f.to) q.set('a', f.to); if (f.sort !== 'recent') q.set('tri', f.sort); if (f.liste) q.set('liste', '1');
+  if (f.from) q.set('de', f.from); if (f.to) q.set('a', f.to); if (f.sort !== 'recent') q.set('tri', f.sort);
   history.replaceState(history.state, '', '/catalogue' + (q.toString() ? '?' + q : ''));
 };
 
@@ -308,7 +529,6 @@ const filterItems = (f) => {
     if (f.genre && !it.genres.includes(f.genre)) return false;
     if (f.from && !(yr(it) >= +f.from)) return false;
     if (f.to && !(yr(it) <= +f.to)) return false;
-    if (f.liste && !inMyList(it)) return false;
     if (words.length) {
       const hay = norm([it.title, it.director, it.year, ...it.genres, ...it.cast, TYPES[it.type]].join(' '));
       if (!words.every(w => hay.includes(w))) return false;
@@ -328,10 +548,13 @@ const filterItems = (f) => {
 // ─── LISTES DÉROULANTES ───────────────────────────────────────────────────────
 // Remplacent les <select> natifs, dont la liste ne se laisse pas habiller.
 // Motif « combobox » de l'ARIA : le focus reste sur le bouton, les flèches parcourent la liste.
-const dropdown = (id, opts, value, { label = '', variant = '', width = '' } = {}) => {
+// prefix : petit mot affiché devant le choix (« Genre », « Tri »…), qui sert aussi d'étiquette
+const dropdown = (id, opts, value, { label = '', prefix = '', variant = '', width = '' } = {}) => {
   const cur = opts.find(o => o[0] === value) || opts[0];
+  if (prefix && !label) label = id + '-l';
   return `<div class="dd${variant ? ' dd-' + variant : ''}" id="${id}" data-value="${esc(cur[0])}"${width ? ` style="--w:${width}"` : ''}>
-    <div class="${variant === 'b' ? 'sel-b' : 'select'} dd-btn" tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false"
+    ${prefix ? `<span class="sr-only" id="${id}-l">${esc(prefix)}</span>` : ''}
+    <div class="${variant === 'b' ? 'sel-b' : 'select'} dd-btn"${prefix ? ` data-prefix="${esc(prefix)}"` : ''} tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false"
       aria-controls="${id}-list" aria-labelledby="${label ? label + ' ' : ''}${id}-v"><span id="${id}-v">${esc(cur[1])}</span></div>
     <ul class="dd-list" id="${id}-list" role="listbox"${label ? ` aria-labelledby="${label}"` : ''} hidden>
       ${opts.map(([v, l], i) => `<li role="option" id="${id}-o${i}" data-v="${esc(v)}" aria-selected="${v === cur[0]}"${v === '' ? ' class="all"' : ''}><span>${esc(l)}</span><small></small></li>`).join('')}
@@ -419,53 +642,63 @@ const initDropdowns = (root, onChange) => $$('.dd', root).forEach(dd => {
   list.addEventListener('click', (e) => { const li = e.target.closest('[role=option]'); if (li) pick(items().indexOf(li)); });
 });
 
+const TYPE_TITLES = { film: 'Films', serie: 'Séries', anime: 'Animes', animation: 'Animation' };
+
 const viewCatalogue = () => {
-  document.title = 'Catalogue · Messi por favor';
   const f = readFilters();
   const genres = [...new Set(S.items.flatMap(it => it.genres))].sort((a, b) => a.localeCompare(b, 'fr'));
   const years = [...new Set(S.items.map(it => parseInt(it.year, 10)).filter(Boolean))].sort((a, b) => b - a).map(String);
 
-  view.innerHTML = `<div class="wrap">
-    <section class="page-head">
-      <h1 class="display page-title">Catalogue</h1>
+  view.innerHTML = `<div class="page">
+    <header class="page-head">
+      <div><h1 class="page-title" id="cat-title">Catalogue</h1><p class="page-sub" id="res-count" aria-live="polite"></p></div>
       ${searchBar(f.q)}
-      <div class="filters">
-        <div class="field"><span class="label" id="f-type-l">Type</span>
-          ${dropdown('f-type', [['', 'Tout'], ...Object.entries(PLURAL)], f.type, { label: 'f-type-l' })}</div>
-        <div class="field"><span class="label" id="f-genre-l">Genres</span>
-          ${dropdown('f-genre', [['', 'Tous'], ...genres.map(g => [g, g])], f.genre, { label: 'f-genre-l' })}</div>
-        <div class="field"><span class="label" id="f-from-l">Sortie : de</span>
-          ${dropdown('f-from', [['', 'Début'], ...years.slice().reverse().map(y => [y, y])], f.from, { label: 'f-from-l' })}</div>
-        <div class="field"><span class="label" id="f-to-l">Sortie : à</span>
-          ${dropdown('f-to', [['', 'Fin'], ...years.map(y => [y, y])], f.to, { label: 'f-to-l' })}</div>
-        <div class="field"><span class="label" id="f-sort-l">Tri</span>
-          ${dropdown('f-sort', Object.entries(SORTS), f.sort, { label: 'f-sort-l' })}</div>
-        <div class="field"><span class="label" id="f-liste-l">Ma liste</span>
-          <button class="toggle" id="f-liste" type="button" aria-labelledby="f-liste-l" aria-pressed="${f.liste}">Seulement<span class="box"></span></button></div>
+    </header>
+    <div class="toolbar">
+      <div class="seg" id="f-types" role="group" aria-label="Type">
+        ${[['', 'Tout'], ...Object.entries(PLURAL)].map(([v, l]) => `<button type="button" data-type="${v}" aria-pressed="${f.type === v}">${esc(l)}<small></small></button>`).join('')}
+        ${S.collections.length ? `<a href="/collections" data-link>Collections<small>${S.collections.length}</small></a>` : ''}
       </div>
-      <div class="results-bar"><span class="label" id="res-count" aria-live="polite"></span>
-        <button class="btn-ghost" id="f-reset" type="button">${icon('reset')}Réinitialiser</button></div>
-    </section>
-    <section class="grid-wrap" id="results"></section>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <div class="filters">
+        ${dropdown('f-genre', [['', 'Tous'], ...genres.map(g => [g, g])], f.genre, { prefix: 'Genre' })}
+        ${dropdown('f-from', [['', 'Début'], ...years.slice().reverse().map(y => [y, y])], f.from, { prefix: 'De' })}
+        ${dropdown('f-to', [['', 'Fin'], ...years.map(y => [y, y])], f.to, { prefix: 'À' })}
+        ${dropdown('f-sort', Object.entries(SORTS), f.sort, { prefix: 'Tri' })}
+        <button class="reset" id="f-reset" type="button" hidden>${icon('reset')}Tout effacer</button>
+      </div>
+    </div>
+    <section id="results"></section>
   </div>`;
 
   const update = () => {
     $$('.filters .dd').forEach(dd => $('.dd-btn', dd).classList.toggle('dim', !dd.dataset.value && dd.id !== 'f-sort'));
     // Nombre de titres derrière chaque choix, compte tenu des autres filtres
-    [['f-type', 'type'], ['f-genre', 'genre']].forEach(([id, key]) => $$(`#${id}-list [role=option]`).forEach(li => {
-      $('small', li).textContent = filterItems({ ...f, [key]: li.dataset.v }).length;
-    }));
+    $$('#f-types [data-type]').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.type === f.type);
+      $('small', b).textContent = filterItems({ ...f, type: b.dataset.type }).length;
+    });
+    $$('#f-genre-list [role=option]').forEach(li => { $('small', li).textContent = filterItems({ ...f, genre: li.dataset.v }).length; });
     const list = filterItems(f);
-    $('#res-count').innerHTML = `<b>${list.length}</b> résultat${list.length > 1 ? 's' : ''}`;
+    const title = TYPE_TITLES[f.type] || 'Catalogue';
+    $('#cat-title').textContent = title;
+    document.title = title + ' · Messi por favor';
+    $('#res-count').textContent = `${list.length} titre${list.length > 1 ? 's' : ''}${f.q ? ` pour « ${f.q} »` : ''}`;
+    const filtered = f.q || f.genre || f.from || f.to || f.sort !== 'recent';
+    $('#f-reset').hidden = !filtered;
     $('#results').innerHTML = list.length
-      ? `<div class="grid">${list.map(card).join('')}</div>`
-      : `<p class="empty">${f.liste && !S.myList.length ? 'Ta liste est vide. Ajoute des titres avec « + Ma liste » sur leur fiche.' : 'Rien ne correspond.'}</p>`;
+      ? `<div class="grid">${list.map(it => card(it)).join('')}</div>`
+      : `<div class="empty"><b>Rien ne correspond</b>Essaie un autre mot, ou enlève un filtre.<br><button class="btn glass" type="button" data-reset>${icon('reset')}Tout effacer</button></div>`;
     writeFilters(f);
+    setTab();
   };
-  const keys = { 'f-type': 'type', 'f-genre': 'genre', 'f-from': 'from', 'f-to': 'to', 'f-sort': 'sort' };
+  // « Tout effacer » garde le type choisi (Films, Séries…)
+  const reset = () => go('/catalogue' + (f.type ? '?type=' + f.type : ''), { replace: true });
+  const keys = { 'f-genre': 'genre', 'f-from': 'from', 'f-to': 'to', 'f-sort': 'sort' };
   initDropdowns($('.filters'), (id, v) => { f[keys[id]] = v; update(); });
-  $('#f-liste').addEventListener('click', (e) => { f.liste = !f.liste; e.currentTarget.setAttribute('aria-pressed', f.liste); update(); });
-  $('#f-reset').addEventListener('click', () => go('/catalogue', { replace: true }));
+  $('#f-types').addEventListener('click', (e) => { const b = e.target.closest('[data-type]'); if (b) { f.type = b.dataset.type; update(); } });
+  $('#f-reset').addEventListener('click', reset);
+  $('#results').addEventListener('click', (e) => { if (e.target.closest('[data-reset]')) reset(); });
   bindSearch((q) => { f.q = q; update(); });
   update();
 };
@@ -475,74 +708,75 @@ const viewCatalogue = () => {
 const directorLinks = (names) => names.split(/\s*,\s*/).filter(Boolean)
   .map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ');
 
-const colCard = (c) => `<a class="col-card" href="/collection/${esc(c.id)}" data-link>
-    <div class="col-art">
-      ${placeholder()}${imgTag(c.backdrop)}
-      <span class="tag">Collection · ${c.films.length} films</span>
-      <div class="col-strip" aria-hidden="true">${c.films.slice(0, 6).map(f => `<span class="col-mini">${imgTag(f.poster)}</span>`).join('')}</div>
-    </div>
-    <div class="card-meta"><span class="card-title">${esc(c.title)}</span>${c.years ? `<span class="card-year">${esc(c.years)}</span>` : ''}</div>
-    ${c.director ? `<p class="card-genres">${esc(c.director)}</p>` : ''}
-  </a>`;
-
 const viewCollections = () => {
   document.title = 'Collections · Messi por favor';
-  const n = S.collections.length;
-  view.innerHTML = `<div class="wrap">
-    <section class="page-head">
-      <h1 class="display page-title long">Collections</h1>
-      <div class="results-bar col-count"><span class="label"><b>${n}</b> collection${n > 1 ? 's' : ''}</span></div>
-    </section>
-    <section class="grid-wrap">${n
-      ? `<div class="col-grid">${S.collections.map(colCard).join('')}</div>`
-      : `<p class="empty">Aucune collection pour l'instant.</p>`}</section>
+  const n = S.collections.length, films = S.collections.reduce((k, c) => k + c.films.length, 0);
+  view.innerHTML = `<div class="page">
+    <header class="page-head"><div><h1 class="page-title">Collections</h1>
+      <p class="page-sub">${n} collection${n > 1 ? 's' : ''}, ${films} films à voir dans l'ordre</p></div></header>
+    <div class="toolbar">
+      <nav class="seg" aria-label="Catalogue">
+        ${[['', 'Tout'], ...Object.entries(PLURAL)].map(([v, l]) => `<a href="/catalogue${v ? '?type=' + v : ''}" data-link>${esc(l)}<small>${v ? S.items.filter(it => it.type === v).length : S.items.length}</small></a>`).join('')}
+        <a href="/collections" data-link aria-current="page">Collections<small>${n}</small></a>
+      </nav>
+    </div>
+    ${n ? `<div class="col-grid">${S.collections.map(colCard).join('')}</div>` : `<div class="empty"><b>Aucune collection pour l'instant</b></div>`}
   </div>`;
+};
+
+// Fiche : l'image du film en grand, le texte en bas à gauche
+const detailHero = ({ bg, crumb, title, meta, extra = '', synopsis, actions, after = '' }) => `<section class="detail">
+    ${bg ? `<div class="detail-bg"><img src="${esc(bg)}" alt="" fetchpriority="high"></div>` : ''}
+    <div class="glow" aria-hidden="true"></div>
+    <div class="detail-in">
+      ${crumb}
+      <h1 class="detail-title${titleSize(title)}">${esc(title)}</h1>
+      ${meta ? `<div class="meta">${meta}</div>` : ''}
+      ${extra}
+      ${synopsis ? `<p class="synopsis">${esc(synopsis)}</p>` : ''}
+      <div class="actions">${actions}</div>
+      ${after}
+    </div>
+  </section>`;
+// Reflet coloré pris dans l'image
+const tintDetail = () => {
+  const d = $('.detail'), img = $('.detail-bg img');
+  if (img) whenLoaded(img, () => { const t = tintOf(img); if (t) d.style.setProperty('--tint', t); });
 };
 
 const viewCollection = (id) => {
   const c = S.collections.find(x => x.id === id);
   if (!c) {
-    view.innerHTML = `<div class="wrap"><p class="empty">Cette collection n'existe plus. <a class="link-u" href="/collections" data-link>Toutes les collections →</a></p></div>`;
+    view.innerHTML = `<div class="page"><div class="empty"><b>Cette collection n'existe plus</b><a class="btn glass" href="/collections" data-link>Toutes les collections</a></div></div>`;
     return;
   }
   document.title = c.title + ' · Messi por favor';
   // Le film à lancer : le premier pas encore terminé, dans l'ordre de la collection
   const nextIdx = Math.max(0, c.films.findIndex(f => progressPct(f.id) < 90));
   const next = c.films[nextIdx], started = progressPct(next.id) > 0;
-  const chips = [
-    `<span class="chip">${c.films.length} films</span>`,
-    c.years ? `<span class="chip">${esc(c.years)}</span>` : '',
-    c.minutes ? `<span class="chip">${esc(fmtDuration(c.minutes))} au total</span>` : '',
-  ].join('');
 
-  view.innerHTML = `<section class="hero">
-      ${c.backdrop ? `<div class="hero-bg" style="background-image:url(&quot;${esc(c.backdrop.replace(/"/g, '%22'))}&quot;)"></div>` : ''}
-      <div class="wrap hero-in">
-        <nav class="crumbs label" aria-label="Fil d'Ariane">
-          <a href="/collections" data-link>/Collections</a><span aria-hidden="true">/</span><span class="here">${esc(slug(c.title))}</span>
-        </nav>
-        <div class="hero-grid solo">
-          <h1 class="display">${esc(c.title)}</h1>
-          <div class="chips">${chips}</div>
-          ${c.director ? `<p class="by label">Réalisé par ${directorLinks(c.director)}</p>` : ''}
-          ${c.description ? `<p class="synopsis">${esc(c.description)}</p>` : ''}
-          <div class="actions">
-            <button class="btn-red" id="play-btn">${icon('play')}${started ? 'Reprendre' : 'Lecture'}</button>
-          </div>
-          <p class="label resume-note">Film ${nextIdx + 1} sur ${c.films.length} · ${esc(next.title)}</p>
-        </div>
-      </div>
-    </section>
-    <div class="wrap fiche-body">${row('Les films', c.films, null)}</div>`;
+  view.innerHTML = detailHero({
+    bg: c.backdrop,
+    crumb: `<a class="crumb" href="/collections" data-link>${icon('left')}Collections</a>`,
+    title: c.title,
+    meta: metaHtml(null, [`${c.films.length} films`, c.years, c.minutes ? fmtShort(c.minutes) + ' en tout' : '']),
+    extra: c.director ? `<p class="by">Réalisé par ${directorLinks(c.director)}</p>` : '',
+    synopsis: c.description,
+    actions: `<button class="btn play" id="play-btn" type="button">${icon('play')}${started ? 'Reprendre' : 'Lecture'}</button>`,
+    after: `<p class="note">Film ${nextIdx + 1} sur ${c.films.length} : ${esc(next.title)}</p>`,
+  }) + `<div class="fiche-body">
+      <section class="row">${rowHead('Les films', 'dans l\'ordre de la collection')}<div class="grid">${c.films.map((f, k) => card(f, { num: k + 1 })).join('')}</div></section>
+    </div>`;
   $('#play-btn').addEventListener('click', () => openPlayer(next, null));
   clampSynopsis();
+  tintDetail();
 };
 
 // ─── FICHE FILM / SÉRIE ───────────────────────────────────────────────────────
 const viewTitle = (kind, id) => {
   const it = S.byKey.get(kind + ':' + id);
   if (!it) {
-    view.innerHTML = `<div class="wrap"><p class="empty">Ce titre n'est plus au catalogue. <a class="link-u" href="/catalogue" data-link>Retour au catalogue →</a></p></div>`;
+    view.innerHTML = `<div class="page"><div class="empty"><b>Ce titre n'est plus sur le disque</b><a class="btn glass" href="/catalogue" data-link>Retour au catalogue</a></div></div>`;
     return;
   }
   document.title = it.title + ' · Messi por favor';
@@ -550,112 +784,81 @@ const viewTitle = (kind, id) => {
   const bg = it.backdrop || it.poster;
 
   // Bouton principal : reprendre là où on s'est arrêté, sinon commencer
-  let playLabel = 'Lecture', resumeNote = '';
+  let playLabel = 'Lecture', resume = null;
   if (kind === 'film') {
     const p = S.progress[it.id];
-    if (p && p.ts > 20) { playLabel = 'Reprendre'; resumeNote = `Arrêté à ${fmtTime(p.ts)} sur ${fmtTime(p.duration)}`; }
+    if (p && p.ts > 20) { playLabel = 'Reprendre'; resume = { pct: progressPct(it.id), text: `Arrêté à ${fmtTime(p.ts)} sur ${fmtTime(p.duration)}` }; }
   } else {
     const cur = currentEpisode(it.id) || eps[0];
     if (cur) {
-      playLabel = (S.progress[cur.id] ? 'Reprendre ' : 'Lecture ') + epLabel(cur, it);
-      if (S.progress[cur.id]) resumeNote = `${cur.title || 'Épisode ' + cur.episode} · arrêté à ${fmtTime(S.progress[cur.id].ts)}`;
+      const p = S.progress[cur.id];
+      playLabel = (p ? 'Reprendre ' : 'Lecture ') + epLabel(cur, it);
+      if (p) resume = { pct: progressPct(cur.id), text: `${cur.title || 'Épisode ' + cur.episode}, arrêté à ${fmtTime(p.ts)}` };
     }
   }
 
-  const chips = [
-    it.rating ? `<span class="chip">${icon('star')}${it.rating.toFixed(1)}/10</span>` : '',
-    it.year ? `<span class="chip">${esc(it.year)}</span>` : '',
-    kind === 'film' && it.duration ? `<span class="chip">${esc(fmtDuration(it.duration))}</span>` : '',
-    kind === 'serie' ? `<span class="chip">${it.epCount} épisode${it.epCount > 1 ? 's' : ''}</span>` : '',
-    ...it.genres.map(g => `<span class="chip">${esc(g)}</span>`),
-  ].join('');
-
   const inCols = kind === 'film' ? S.collections.filter(c => c.films.includes(it)) : [];
+  const cast = it.cast.slice(0, 5);
 
-  // Dans le même genre, sinon du même type
+  // Les plus proches : genres en commun d'abord, puis la note
   const more = S.items
     .filter(o => o.key !== it.key && (it.genres.length ? o.genres.some(g => it.genres.includes(g)) : o.type === it.type))
-    .sort((a, b) => b.addedAt - a.addedAt).slice(0, 6);
+    .map(o => [o, o.genres.filter(g => it.genres.includes(g)).length * 10 + (o.rating || 0)])
+    .sort((a, b) => b[1] - a[1]).slice(0, 18).map(x => x[0]);
 
-  view.innerHTML = `<section class="hero">
-      ${bg ? `<div class="hero-bg" style="background-image:url(&quot;${esc(bg.replace(/"/g, '%22'))}&quot;)"></div>` : ''}
-      <div class="wrap hero-in">
-        <nav class="crumbs label" aria-label="Fil d'Ariane">
-          <a href="/catalogue?type=${it.type}" data-link>/${esc(PLURAL[it.type])}</a><span aria-hidden="true">/</span><span class="here">${esc(slug(it.title))}</span>
-        </nav>
-        <div class="hero-grid">
-          <div class="hero-poster">${posterHtml(it.poster)}</div>
-          <h1 class="display">${esc(it.title)}</h1>
-          ${chips ? `<div class="chips">${chips}</div>` : ''}
-          ${it.director ? `<p class="by label">Réalisé par <a href="/catalogue?q=${encodeURIComponent(it.director)}" data-link><b>${esc(it.director)}</b></a></p>` : ''}
-          ${inCols.length ? `<p class="by label">Collection · ${inCols.map(c => `<a href="/collection/${esc(c.id)}" data-link><b>${esc(c.title)}</b></a>`).join(', ')}</p>` : ''}
-          ${it.cast.length ? `<p class="by label">Avec ·${it.cast.map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ')}</p>` : ''}
-          ${it.description ? `<p class="synopsis">${esc(it.description)}</p>` : ''}
-          <div class="actions">
-            <button class="btn-red" id="play-btn">${icon('play')}${esc(playLabel)}</button>
-            <button class="btn-line${inMyList(it) ? ' on' : ''}" id="list-btn" aria-pressed="${inMyList(it)}">${inMyList(it) ? '✓ Dans ma liste' : '+ Ma liste'}</button>
-          </div>
-          ${resumeNote ? `<p class="label resume-note">${esc(resumeNote)}</p>` : ''}
-        </div>
-      </div>
-    </section>
-    <div class="wrap fiche-body">
-      ${kind === 'serie' ? `<div id="episodes-zone"></div>` : ''}
-      <div class="more">${row(it.genres.length ? 'Dans le même genre' : 'À voir aussi', more, null)}</div>
+  view.innerHTML = detailHero({
+    bg,
+    crumb: `<a class="crumb" href="/catalogue?type=${it.type}" data-link>${icon('left')}${esc(PLURAL[it.type])}</a>`,
+    title: it.title,
+    meta: metaHtml(it.rating, [it.year, kind === 'film' ? fmtShort(it.duration) : seriesLine(it)], it.genres),
+    extra: (it.director ? `<p class="by">Réalisé par ${directorLinks(it.director)}</p>` : '') +
+      (cast.length ? `<p class="by">Avec ${cast.map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ')}</p>` : ''),
+    synopsis: it.description,
+    actions: `<button class="btn play" id="play-btn" type="button">${icon('play')}${esc(playLabel)}</button>`,
+    after: (resume ? `<div class="resume"><span class="pb"><i style="width:${resume.pct}%"></i></span><span>${esc(resume.text)}</span></div>` : '') +
+      inCols.map(c => `<a class="in-col" href="/collection/${esc(c.id)}" data-link>${icon('grid')}Fait partie de la collection <b>${esc(c.title)}</b></a>`).join('<br>'),
+  }) + `<div class="fiche-body">
+      ${kind === 'serie' ? `<section class="eps" id="episodes-zone"></section>` : ''}
+      ${row(it.genres.length ? 'Dans le même genre' : 'À voir aussi', more, null)}
     </div>`;
 
   // Le bouton reste là même sans vidéo : il prévient simplement qu'elle arrive
-  $('#play-btn').addEventListener('click', () => {
-    if (kind === 'film') return openPlayer(it, null);
-    if (!eps.length) return toast('Les épisodes ne sont pas encore disponibles');
-    openPlayer(it, currentEpisode(it.id) || eps[0]);
-  });
-  $('#list-btn').addEventListener('click', async (e) => {
-    const btn = e.currentTarget, on = !inMyList(it);
-    btn.disabled = true;
-    const r = await api('/api/mylist', { kind: it.kind, id: it.id, on });
-    btn.disabled = false;
-    if (r.error) return toast(r.error);
-    S.myList = r.myList;
-    btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', on);
-    btn.textContent = on ? '✓ Dans ma liste' : '+ Ma liste';
-    toast(on ? 'Ajouté à ta liste' : 'Retiré de ta liste');
-  });
+  $('#play-btn').addEventListener('click', () => playItem(it));
   clampSynopsis();
+  tintDetail();
   if (kind === 'serie') renderEpisodes(it, eps);
 };
 
 const renderEpisodes = (it, eps) => {
   const zone = $('#episodes-zone');
-  if (!eps.length) { zone.innerHTML = `<p class="empty">Aucun épisode pour le moment.</p>`; return; }
+  if (!eps.length) { zone.innerHTML = `${rowHead('Épisodes')}<p class="empty" style="padding:0">Aucun épisode pour le moment.</p>`; return; }
   const seasons = it.noSeason ? [null] : [...new Set(eps.map(e => e.season || 1))];
   const cur = currentEpisode(it.id);
   let season = it.noSeason ? null : (cur ? cur.season || 1 : seasons[0]);
 
   const draw = () => {
     const list = season === null ? eps : eps.filter(e => (e.season || 1) === season);
-    zone.innerHTML = `
-      <div class="tabs" role="tablist" aria-label="Saisons">
-        ${seasons.map(s => `<button role="tab" data-season="${s ?? ''}" aria-selected="${s === season}">${s === null ? 'Épisodes' : 'Saison ' + s}</button>`).join('')}
-      </div>
-      <div class="episodes" role="tabpanel">
+    zone.innerHTML = `<div class="rh"><h2>Épisodes</h2>
+        ${seasons.length > 1 ? `<div class="seasons" role="tablist" aria-label="Saisons">${seasons.map(s =>
+          `<button type="button" role="tab" data-season="${s}" aria-selected="${s === season}">Saison ${s}</button>`).join('')}</div>`
+          : season !== null ? `<span>Saison ${season}</span>` : ''}
+        <span class="eps-count">${list.length} épisode${list.length > 1 ? 's' : ''}</span></div>
+      <div class="episodes"${seasons.length > 1 ? ' role="tabpanel"' : ''}>
         ${list.map(e => {
           const pct = progressPct(e.id);
           const thumb = imgUrl(e.thumb) || it.backdrop;
-          return `<button class="ep" data-ep="${esc(e.id)}">
-            <div class="ep-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" onerror="this.remove()">` : placeholder()}
-              <div class="ep-play"><span>${icon('play')}</span></div>
-              ${pct ? `<div class="prog"><i style="width:${pct}%"></i></div>` : ''}</div>
-            <div>
-              <p class="ep-num">${epLabel(e, it)}</p>
-              <p class="ep-title">${esc(e.title || 'Épisode ' + e.episode)}</p>
-              ${e.description ? `<p class="ep-desc">${esc(e.description)}</p>` : ''}
-            </div>
-            <span class="ep-dur">${esc(fmtDuration(e.duration))}</span>
+          return `<button class="ep" type="button" data-ep="${esc(e.id)}">
+            <span class="ep-thumb">${placeholder()}${imgTag(thumb)}
+              ${cur && e.id === cur.id ? '<span class="ep-cur">En cours</span>' : ''}
+              <span class="ep-play">${icon('play')}</span>
+              ${pct ? `<span class="prog"><i style="width:${pct}%"></i></span>` : ''}</span>
+            <span class="ep-row"><span class="ep-num">Épisode ${e.episode || ''}</span><span class="ep-dur">${esc(fmtDuration(e.duration))}</span></span>
+            <span class="ep-title">${esc(e.title || 'Épisode ' + e.episode)}</span>
+            ${e.description ? `<span class="ep-desc">${esc(e.description)}</span>` : ''}
           </button>`;
         }).join('')}
       </div>`;
-    $$('[data-season]', zone).forEach(b => b.addEventListener('click', () => { season = b.dataset.season ? +b.dataset.season : null; draw(); }));
+    $$('[data-season]', zone).forEach(b => b.addEventListener('click', () => { season = +b.dataset.season; draw(); }));
     $$('[data-ep]', zone).forEach(b => b.addEventListener('click', () => openPlayer(it, eps.find(e => e.id === b.dataset.ep))));
   };
   draw();
@@ -1213,15 +1416,6 @@ const toast = (msg) => {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 };
 
-// ─── MENU TÉLÉPHONE ───────────────────────────────────────────────────────────
-const closeMenus = () => { $('#mobile-nav').hidden = true; $('#menu-btn').setAttribute('aria-expanded', 'false'); };
-$('#menu-btn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  const nav = $('#mobile-nav'), open = nav.hidden;
-  nav.hidden = !open; $('#menu-btn').setAttribute('aria-expanded', open);
-});
-document.addEventListener('click', (e) => { if (!e.target.closest('#mobile-nav')) closeMenus(); });
-
 // ─── LIEN AVEC LE DISQUE ──────────────────────────────────────────────────────
 // La page garde une connexion avec le site : tant qu'elle est ouverte, il tourne.
 // Quand on ferme la dernière page, il s'arrête tout seul et le disque peut être éjecté.
@@ -1235,7 +1429,7 @@ const connect = () => {
   };
 };
 
-// Quitter : le site s'arrête tout de suite (sinon, 1 min 30 après la fermeture de la page)
+// Éjecter : le site s'arrête tout de suite (sinon, 1 min 30 après la fermeture de la page)
 const showClosed = () => {
   quitting = true;
   events?.close();
@@ -1244,14 +1438,15 @@ const showClosed = () => {
   document.title = 'Fermé · Messi por favor';
   $('#offline').hidden = true;
   document.body.classList.add('closed');
-  view.innerHTML = `<div class="wrap closed-screen">
-    <h1 class="display">Messi por favor est fermé<span class="dot">.</span></h1>
+  stopHero();
+  view.innerHTML = `<div class="closed-screen">${logoFace()}
+    <h1 class="display">Messi por favor est fermé</h1>
     <p>Tu peux fermer cet onglet et éjecter le disque.</p>
-    <p class="label">Pour revenir : double-clique sur « ▶ Messi por favor », tout en haut du disque.</p>
+    <p class="hint">Pour revenir : double-clique sur « ▶ Messi por favor », tout en haut du disque.</p>
   </div>`;
 };
 $('#quit-btn').addEventListener('click', async () => {
-  if (!await confirmBox('Quitter', 'Le site va s\'arrêter. Ta progression est enregistrée sur le disque, tu pourras ensuite l\'éjecter.', 'Quitter')) return;
+  if (!await confirmBox('Éjecter le disque', 'Le site va s\'arrêter et ta progression est enregistrée. Tu pourras ensuite éjecter le disque dans le Finder.', 'Arrêter le site')) return;
   if (!player.hidden) saveProgress();
   quitting = true;
   await api('/api/quit', {});
@@ -1260,7 +1455,7 @@ $('#quit-btn').addEventListener('click', async () => {
 
 // ─── RECHERCHE RAPIDE (⌘K) ────────────────────────────────────────────────────
 const openPalette = () => {
-  const pages = [['Accueil', '/'], ['Catalogue', '/catalogue'], ['Collections', '/collections'], ['Ma liste', '/catalogue?liste=1']];
+  const pages = [['Accueil', '/'], ['Catalogue', '/catalogue'], ['Séries', '/catalogue?type=serie'], ['Films', '/catalogue?type=film'], ['Collections', '/collections']];
   const actions = window.mpfIntro ? [['Rejouer l\u2019intro', 'La taupe sort de son trou', () => window.mpfIntro()]] : [];
   const m = modal('', `<div class="palette-in">${icon('search')}
       <label class="sr-only" for="pal-in">Rechercher</label>
@@ -1278,10 +1473,10 @@ const openPalette = () => {
     const pg = pages.filter(([l]) => !k || norm(l).includes(k));
     const acts = actions.filter(([l]) => !k || norm(l + ' animation taupe').includes(k));
     entries = [
-      ...titles.map(it => ({ href: `/${it.kind}/${it.id}`, label: it.title, small: [TYPES[it.type], it.year].filter(Boolean).join(' · ') })),
-      ...cols.map(c => ({ href: `/collection/${c.id}`, label: c.title, small: `Collection · ${c.films.length} films` })),
-      ...pg.map(([l, h]) => ({ href: h, label: l, small: h })),
-      ...acts.map(([l, sm, run]) => ({ run, label: l, small: sm })),
+      ...titles.map(it => ({ href: `/${it.kind}/${it.id}`, label: it.title, small: [TYPES[it.type], it.year].filter(Boolean).join(', '), img: it.poster })),
+      ...cols.map(c => ({ href: `/collection/${c.id}`, label: c.title, small: `Collection, ${c.films.length} films`, img: c.films[0]?.poster })),
+      ...pg.map(([l, h]) => ({ href: h, label: l, small: 'Page', ic: 'right' })),
+      ...acts.map(([l, sm, run]) => ({ run, label: l, small: sm, ic: 'sparkle' })),
     ];
     sel = Math.max(0, Math.min(sel, entries.length - 1));
     let html = '', i = 0;
@@ -1291,8 +1486,14 @@ const openPalette = () => {
     if (acts.length) html += `<p class="label">Animation</p>` + acts.map(() => item(i++)).join('');
     if (!entries.length) html = `<p class="label">Aucun résultat sur ce disque</p>`;
     listEl.innerHTML = html;
+    $('.palette-item.sel', listEl)?.scrollIntoView({ block: 'nearest' });
   };
-  const item = (i) => `<button class="palette-item${i === sel ? ' sel' : ''}" data-i="${i}"><span>${esc(entries[i].label)}</span><small>${esc(entries[i].small)}</small></button>`;
+  // Une affiche pour les titres et collections, une icône pour les pages et actions
+  const item = (i) => {
+    const en = entries[i];
+    const lead = en.ic ? `<span class="pi-ic">${icon(en.ic)}</span>` : `<span class="pi-th">${en.img ? `<img src="${esc(en.img)}" alt="">` : ''}</span>`;
+    return `<button class="palette-item${i === sel ? ' sel' : ''}" data-i="${i}">${lead}<span class="pi-t">${esc(en.label)}</span><small>${esc(en.small)}</small></button>`;
+  };
   const pick = (i) => {
     const en = entries[i]; if (!en) return;
     closeModal();
@@ -1323,7 +1524,6 @@ document.addEventListener('keydown', (e) => {
     const bg = $('[data-bg]');
     if (bg) { if (bg.dataset.closable === 'true') closeModal(); return; }
     if (!$('#player').hidden) { if (!closePanel()) history.back(); return; }
-    closeMenus();
   }
 });
 
