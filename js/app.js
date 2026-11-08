@@ -336,7 +336,9 @@ const setTab = () => {
   });
   // La pilule blanche glisse sous l'onglet ouvert
   const nav = $('.nav'), ind = $('.nav-ind'), on = $('.nav a.active');
-  if (on) { ind.style.width = on.offsetWidth + 'px'; ind.style.transform = `translateX(${on.offsetLeft}px)`; ind.style.opacity = 1; }
+  if (on) {
+    Object.assign(ind.style, { width: on.offsetWidth + 'px', height: on.offsetHeight + 'px', transform: `translate(${on.offsetLeft}px, ${on.offsetTop}px)`, opacity: 1 });
+  }
   else ind.style.opacity = 0;
   if (!nav.classList.contains('ready')) requestAnimationFrame(() => requestAnimationFrame(() => nav.classList.add('ready')));
 };
@@ -346,11 +348,14 @@ document.fonts?.ready.then(setTab);
 // En-tête transparent sur la grande image, opaque dès qu'on descend
 const header = $('#header');
 const paintHeader = () => header.classList.toggle('solid', scrollY > 40);
+// L'onglet ouvert prend la couleur du film affiché (null : pilule de verre neutre)
+const setNavTint = (t) => { header.classList.toggle('tinted', !!t); if (t) header.style.setProperty('--nt', t); };
 addEventListener('scroll', paintHeader, { passive: true });
 
 const render = () => {
   if (!$('#player').hidden) closePlayer();
   stopHero();
+  setNavTint(null);
   closeOpenDD = null;
   const path = location.pathname;
   for (const [re, fn] of routes) {
@@ -440,7 +445,7 @@ const initHero = (picks) => {
     copy.innerHTML = heroCopy(picks[k]);
     copy.classList.remove('swap'); void copy.offsetWidth; copy.classList.add('swap');
     const img = $('img', slides[k]);
-    if (img) whenLoaded(img, () => { const t = cur === k && tintOf(img); if (t) hero.style.setProperty('--tint', t); });
+    if (img) whenLoaded(img, () => { const t = cur === k && img.isConnected && tintOf(img); if (t) { hero.style.setProperty('--tint', t); setNavTint(t); } });
   };
   const arm = (ms) => {
     stopHero();
@@ -741,7 +746,7 @@ const detailHero = ({ bg, crumb, title, meta, extra = '', synopsis, actions, aft
 // Reflet coloré pris dans l'image
 const tintDetail = () => {
   const d = $('.detail'), img = $('.detail-bg img');
-  if (img) whenLoaded(img, () => { const t = tintOf(img); if (t) d.style.setProperty('--tint', t); });
+  if (img) whenLoaded(img, () => { const t = img.isConnected && tintOf(img); if (t) { d.style.setProperty('--tint', t); setNavTint(t); } });
 };
 
 const viewCollection = (id) => {
