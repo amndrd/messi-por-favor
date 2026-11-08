@@ -62,8 +62,16 @@ input, select, textarea { font: inherit; color: inherit; }
 /* ══ EN-TÊTE ══════════════════════════════════════════════════════════════ */
 .header { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); }
 .header-in { display: flex; align-items: center; gap: 2rem; height: var(--header); }
-.logo { font: 24px/1 var(--font-d); text-transform: uppercase; letter-spacing: -.03em; white-space: nowrap; }
-.logo span { color: var(--accent); }
+.logo { display: flex; align-items: center; color: var(--fg); }
+.logo-face { display: block; height: 30px; width: auto; }
+/* au survol, les moustaches frétillent */
+.logo-wl, .logo-wr { transform-box: view-box; }
+.logo-wl { transform-origin: 166px 252px; } .logo-wr { transform-origin: 234px 252px; }
+.logo:hover .logo-wl { animation: moustache-g .5s ease-out; }
+.logo:hover .logo-wr { animation: moustache-d .5s ease-out; }
+@keyframes moustache-g { 20% { transform: rotate(9deg); } 45% { transform: rotate(-6deg); } 70% { transform: rotate(3deg); } }
+@keyframes moustache-d { 20% { transform: rotate(-9deg); } 45% { transform: rotate(6deg); } 70% { transform: rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) { .logo:hover .logo-wl, .logo:hover .logo-wr { animation: none; } }
 .nav { display: flex; gap: 1.75rem; }
 .nav a {
   position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 0;
