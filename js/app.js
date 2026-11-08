@@ -354,6 +354,7 @@ addEventListener('scroll', paintHeader, { passive: true });
 
 const render = () => {
   if (!$('#player').hidden) closePlayer();
+  closeWall();
   stopHero();
   setNavTint(null);
   closeOpenDD = null;
@@ -1458,74 +1459,119 @@ $('#quit-btn').addEventListener('click', async () => {
   showClosed();
 });
 
-// ─── RECHERCHE RAPIDE (⌘K) ────────────────────────────────────────────────────
-const openPalette = () => {
-  const pages = [['Accueil', '/'], ['Catalogue', '/catalogue'], ['Séries', '/catalogue?type=serie'], ['Films', '/catalogue?type=film'], ['Collections', '/collections']];
-  const actions = window.mpfIntro ? [['Rejouer l\u2019intro', 'La taupe sort de son trou', () => window.mpfIntro()]] : [];
-  const m = modal('', `<div class="palette-in">${icon('search')}
-      <label class="sr-only" for="pal-in">Rechercher</label>
-      <input id="pal-in" placeholder="Rechercher un film, une série, une page…" autocomplete="off" spellcheck="false">
-      <button class="modal-close" data-close aria-label="Fermer">${icon('x')}</button></div>
-    <div class="palette-list" id="pal-list"></div>`, { cls: 'palette' });
-  m.querySelector('.modal-body').style.padding = '0';
-  const input = $('#pal-in', m), listEl = $('#pal-list', m);
-  let entries = [], sel = 0;
-
-  const draw = () => {
-    const k = norm(input.value);
-    const titles = k ? S.items.filter(it => norm(it.title + ' ' + it.director).includes(k)).slice(0, 8) : [];
-    const cols = k ? S.collections.filter(c => norm(c.title).includes(k)).slice(0, 3) : [];
-    const pg = pages.filter(([l]) => !k || norm(l).includes(k));
-    const acts = actions.filter(([l]) => !k || norm(l + ' animation taupe').includes(k));
-    entries = [
-      ...titles.map(it => ({ href: `/${it.kind}/${it.id}`, label: it.title, small: [TYPES[it.type], it.year].filter(Boolean).join(', '), img: it.poster })),
-      ...cols.map(c => ({ href: `/collection/${c.id}`, label: c.title, small: `Collection, ${c.films.length} films`, img: c.films[0]?.poster })),
-      ...pg.map(([l, h]) => ({ href: h, label: l, small: 'Page', ic: 'right' })),
-      ...acts.map(([l, sm, run]) => ({ run, label: l, small: sm, ic: 'sparkle' })),
-    ];
-    sel = Math.max(0, Math.min(sel, entries.length - 1));
-    let html = '', i = 0;
-    if (titles.length) html += `<p class="label">Titres</p>` + titles.map(() => item(i++)).join('');
-    if (cols.length) html += `<p class="label">Collections</p>` + cols.map(() => item(i++)).join('');
-    if (pg.length) html += `<p class="label">Naviguer</p>` + pg.map(() => item(i++)).join('');
-    if (acts.length) html += `<p class="label">Animation</p>` + acts.map(() => item(i++)).join('');
-    if (!entries.length) html = `<p class="label">Aucun résultat sur ce disque</p>`;
-    listEl.innerHTML = html;
-    $('.palette-item.sel', listEl)?.scrollIntoView({ block: 'nearest' });
-  };
-  // Une affiche pour les titres et collections, une icône pour les pages et actions
-  const item = (i) => {
-    const en = entries[i];
-    const lead = en.ic ? `<span class="pi-ic">${icon(en.ic)}</span>` : `<span class="pi-th">${en.img ? `<img src="${esc(en.img)}" alt="">` : ''}</span>`;
-    return `<button class="palette-item${i === sel ? ' sel' : ''}" data-i="${i}">${lead}<span class="pi-t">${esc(en.label)}</span><small>${esc(en.small)}</small></button>`;
-  };
-  const pick = (i) => {
-    const en = entries[i]; if (!en) return;
-    closeModal();
-    if (en.run) return en.run();
-    go(en.href);
-  };
-  input.addEventListener('input', () => { sel = 0; draw(); });
-  input.addEventListener('keydown', (e) => {
-    if (!entries.length) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); sel = (sel + 1) % entries.length; draw(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + entries.length) % entries.length; draw(); }
-    else if (e.key === 'Enter') { e.preventDefault(); pick(sel); }
-  });
-  listEl.addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) pick(+b.dataset.i); });
-  draw();
-  input.focus();
+// ─── RECHERCHE : LE MUR D'AFFICHES (⌘K) ───────────────────────────────────────
+// On tape dans le champ de la barre, qui reste à sa place. Dessous, toutes les affiches
+// du disque : celles qui correspondent s'allument et glissent en tête, les autres
+// s'éteignent. Flèches + Entrée au clavier.
+const searchBox = $('#search-box'), searchIn = $('#search-in'), searchClose = $('#search-close');
+let wall = null;
+const closeWall = () => {
+  if (!wall) return false;
+  const w = wall; wall = null;
+  clearTimeout(w.timer); clearTimeout(w.enterTimer);
+  w.el.classList.add('out');
+  setTimeout(() => w.el.remove(), 180);
+  document.body.style.overflow = '';
+  header.classList.remove('searching');
+  searchIn.value = ''; searchIn.blur(); searchClose.hidden = true;
+  return true;
 };
-$('#palette-btn').addEventListener('click', openPalette);
+const openWall = () => {
+  if (wall) return;
+  closeModal();
+  const items = S.items.slice().sort((a, b) => b.addedAt - a.addedAt);
+  const el = document.createElement('div');
+  el.className = 'wall';
+  el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Résultats de la recherche');
+  el.innerHTML = `<div class="wall-info"><span class="wall-n" aria-live="polite"></span><span class="wall-empty" hidden></span></div>
+    <div class="wall-grid">${items.map(it => `<a class="wall-p" href="/${it.kind}/${esc(it.id)}" data-link data-key="${esc(it.key)}" aria-label="${esc(it.title)}">
+      ${posterHtml(it.poster)}<span class="wall-cap"><b>${esc(it.title)}</b><small>${esc([it.year, TYPES[it.type]].filter(Boolean).join(', '))}</small></span></a>`).join('')}</div>`;
+  document.body.append(el);
+  document.body.style.overflow = 'hidden';
+  header.classList.add('searching'); searchClose.hidden = false;
+  const grid = $('.wall-grid', el), count = $('.wall-n', el), empty = $('.wall-empty', el);
+  const tiles = new Map($$('.wall-p', grid).map(a => [a.dataset.key, a]));
+  const hay = new Map(items.map(it => [it.key, norm([it.title, it.director, it.year, ...it.genres, ...it.cast, TYPES[it.type]].join(' '))]));
+  const cols = () => getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+  wall = { el, timer: null, enterTimer: null };
+
+  // Apparition : une vague qui part du coin en haut à gauche (les premières rangées seulement)
+  const n = cols();
+  $$('.wall-p', grid).forEach((a, i) => {
+    const r = Math.floor(i / n);
+    if (r < 8) a.style.setProperty('--d', (r + i % n) * 28 + 'ms'); else a.classList.add('late');
+  });
+  el.classList.add('enter');
+  wall.enterTimer = setTimeout(() => el.classList.remove('enter'), 1800);
+
+  let hits = [], sel = 0;
+  const paintSel = (scroll = true) => {
+    $$('.wall-p.sel', grid).forEach(a => a.classList.remove('sel'));
+    const a = hits[sel] && tiles.get(hits[sel].key);
+    if (a) { a.classList.add('sel'); if (scroll) a.scrollIntoView({ block: 'nearest' }); }
+  };
+  const update = () => {
+    const q = searchIn.value.trim(), words = q.split(/\s+/).map(norm).filter(Boolean), whole = words.join('');
+    hits = words.length ? items.filter(it => words.every(w => hay.get(it.key).includes(w))) : [];
+    hits.sort((a, b) => (norm(b.title).includes(whole) - norm(a.title).includes(whole)) || (b.rating || 0) - (a.rating || 0));
+    sel = 0;
+    const lit = new Set(hits.map(h => h.key));
+    el.scrollTop = 0;
+    // Les affiches trouvées glissent en tête (on anime le trajet de celles qui sont à l'écran)
+    const animate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const first = animate ? new Map([...tiles].map(([k, a]) => [k, a.getBoundingClientRect()])) : null;
+    (words.length ? [...hits, ...items.filter(it => !lit.has(it.key))] : items).forEach(it => grid.append(tiles.get(it.key)));
+    tiles.forEach((a, k) => a.classList.toggle('on', lit.has(k)));
+    el.classList.toggle('typing', words.length > 0);
+    if (first) {
+      const moved = [];
+      tiles.forEach((a, k) => {
+        const f = first.get(k), l = a.getBoundingClientRect(), dx = f.left - l.left, dy = f.top - l.top;
+        if ((dx || dy) && ((f.top < innerHeight && f.bottom > 0) || (l.top < innerHeight && l.bottom > 0))) {
+          a.style.transition = 'none'; a.style.transform = `translate(${dx}px, ${dy}px)`; moved.push(a);
+        }
+      });
+      if (moved.length) { void grid.offsetWidth; moved.forEach(a => { a.style.transition = ''; a.style.transform = ''; }); }
+    }
+    count.textContent = !words.length ? `${items.length} titres sur le disque`
+      : !hits.length ? 'Aucune affiche allumée'
+      : `${hits.length} affiche${hits.length > 1 ? 's' : ''} allumée${hits.length > 1 ? 's' : ''}`;
+    empty.hidden = !words.length || hits.length > 0;
+    empty.textContent = `Rien ne correspond à « ${q} ». Essaie un autre mot.`;
+    paintSel(false);
+  };
+  wall.update = update;
+  wall.move = (key) => {
+    if (!hits.length) return false;
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols(), ArrowUp: -cols() }[key];
+    if (step === undefined) return false;
+    sel = Math.max(0, Math.min(hits.length - 1, sel + step));
+    paintSel();
+    return true;
+  };
+  wall.open = () => { const it = hits[sel]; if (it) go(`/${it.kind}/${it.id}`); };
+  update();
+};
+searchBox.addEventListener('click', (e) => { if (e.target.closest('#search-close')) return; openWall(); searchIn.focus(); });
+searchIn.addEventListener('focus', openWall);
+searchIn.addEventListener('input', () => { if (!wall) openWall(); clearTimeout(wall.timer); wall.timer = setTimeout(wall.update, 90); });
+searchIn.addEventListener('keydown', (e) => {
+  if (!wall) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWall(); return; }
+  if (e.key === 'Enter') { e.preventDefault(); wall.open(); return; }
+  if (wall.move(e.key)) e.preventDefault();
+});
+searchClose.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); closeWall(); });
 
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     if (!$('#player').hidden || quitting) return;
-    if ($('[data-bg]')) closeModal(); else openPalette();
+    if (wall) closeWall(); else if ($('[data-bg]')) closeModal(); else { openWall(); searchIn.focus(); }
     return;
   }
   if (e.key === 'Escape') {
+    if (closeWall()) return;
     const bg = $('[data-bg]');
     if (bg) { if (bg.dataset.closable === 'true') closeModal(); return; }
     if (!$('#player').hidden) { if (!closePanel()) history.back(); return; }

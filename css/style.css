@@ -96,7 +96,17 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .hd-search:hover { background: rgba(255,255,255,.13); color: rgba(255,255,255,.78); }
 .hd-search .ic { width: 17px; height: 17px; color: #E4E4E7; }
-.hd-search span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-search { cursor: text; }
+.hd-search input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; outline: 0; color: #fff; font-size: 14px; }
+.hd-search input::placeholder { color: rgba(255,255,255,.55); }
+.hd-search input::-webkit-search-cancel-button { display: none; }
+.hd-clear { flex: none; width: 28px; height: 28px; border-radius: 99px; display: grid; place-items: center; background: rgba(255,255,255,.14); color: #fff; cursor: pointer; }
+.hd-clear .ic { width: 14px; height: 14px; color: #fff; }
+.hd-clear:hover { background: rgba(255,255,255,.24); }
+/* recherche ouverte : le champ reste à sa place et s'éclaire, la barre passe devant le mur */
+.header.searching .glass { background: rgba(26,26,31,.9); }
+.header.searching .hd-search { background: rgba(255,255,255,.14); box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
+.header.searching .hd-search kbd { display: none; }
 .hd-search kbd { font: 600 11.5px var(--font); color: rgba(255,255,255,.6); padding: 3px 7px; border-radius: 7px; background: rgba(255,255,255,.1); }
 .nav-div { width: 1px; height: 22px; background: rgba(255,255,255,.14); margin: 0 6px; flex: none; }
 .hd-ic { width: 42px; height: 42px; border-radius: 99px; display: grid; place-items: center; color: #E4E4E7; flex: none; transition: background .15s, color .15s; }
@@ -503,23 +513,35 @@ input, select, textarea { font: inherit; color: inherit; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding-top: 6px; }
 .modal-foot .btn-red, .modal-foot .btn-ghost { height: 44px; padding: 0 20px; font-size: 15px; }
 
-/* Recherche rapide (⌘K) */
-.palette { max-width: 640px; overflow: hidden; }
-.palette-in { display: flex; align-items: center; gap: 12px; padding: 0 10px 0 20px; border-bottom: 1px solid var(--line); }
-.palette-in > .ic { width: 20px; height: 20px; color: var(--muted); }
-.palette-in input { flex: 1; min-width: 0; height: 62px; background: none; border: 0; outline: 0; font-size: 17px; color: #fff; }
-.palette-in input::placeholder { color: var(--dim); }
-.palette-list { max-height: min(60vh, 540px); overflow-y: auto; padding: 6px 8px 10px; }
-.palette-list .label { padding: 12px 12px 6px; font-size: 12.5px; font-weight: 600; color: var(--dim); }
-.palette-item { display: flex; align-items: center; gap: 14px; width: 100%; padding: 7px 12px 7px 8px; border-radius: 12px; text-align: left; font-size: 15px; color: var(--body); }
-.palette-item .pi-th { position: relative; width: 32px; aspect-ratio: 2/3; border-radius: 6px; overflow: hidden; background: var(--s3); flex: none; }
-.palette-item .pi-th img { width: 100%; height: 100%; object-fit: cover; }
-.palette-item .pi-ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,.08); flex: none; }
-.palette-item .pi-ic .ic { width: 16px; height: 16px; }
-.palette-item .pi-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.palette-item small { margin-left: auto; flex-shrink: 0; font-size: 13px; color: var(--dim); }
-.palette-item.sel { background: rgba(255,255,255,.1); color: #fff; }
-.palette-item.sel small { color: var(--muted); }
+/* ══ RECHERCHE : LE MUR D'AFFICHES ════════════════════════════════════════
+   Toutes les affiches du disque ; celles qui correspondent s'allument et passent devant. */
+.wall { position: fixed; inset: 0; z-index: 45; overflow-y: auto; overscroll-behavior: contain; padding-top: calc(var(--nav) + 16px); background: rgba(6,6,7,.97); animation: fade .2s ease; }
+@supports (backdrop-filter: blur(1px)) { .wall { background: rgba(6,6,7,.92); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); } }
+.wall.out { opacity: 0; transition: opacity .18s; }
+.wall-info { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; padding: 0 20px 14px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.wall-empty { color: var(--body); }
+.wall-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; padding: 0 20px 40px; }
+.wall-p {
+  position: relative; display: block; aspect-ratio: 2/3; border-radius: 9px; overflow: hidden; background: var(--s1); opacity: .5;
+  transition: transform .5s var(--ease), opacity .3s, filter .3s, box-shadow .2s;
+}
+/* Apparition : une vague qui part du coin en haut à gauche (--d calculé par affiche) */
+.wall.enter .wall-p:not(.late) { animation: wall-in .65s var(--ease) backwards; animation-delay: var(--d, 0ms); }
+@keyframes wall-in { from { opacity: 0; transform: translateY(28px) scale(.86); filter: blur(8px); } }
+.wall-p > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+.wall-p > img.ok { opacity: 1; }
+.wall-p:hover, .wall-p:focus-visible { opacity: 1; }
+.wall.typing .wall-p { opacity: .07; filter: grayscale(1); }
+.wall.typing .wall-p.on { opacity: 1; filter: none; box-shadow: 0 0 0 2px rgba(255,255,255,.85), 0 14px 30px -8px rgba(255,255,255,.28); }
+.wall .wall-p.sel { z-index: 1; opacity: 1; box-shadow: 0 0 0 3px #fff, 0 18px 40px -8px rgba(255,255,255,.45); }
+.wall-cap { position: absolute; inset: auto 0 0; z-index: 2; padding: 28px 8px 8px; background: linear-gradient(0deg, rgba(0,0,0,.92), rgba(0,0,0,0)); opacity: 0; transition: opacity .2s; }
+.wall-cap b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12.5px; font-weight: 600; line-height: 1.25; }
+.wall-cap small { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+.wall-p:hover .wall-cap, .wall-p:focus-visible .wall-cap, .wall-p.sel .wall-cap { opacity: 1; }
+.wall.typing .wall-p:not(.on) .wall-cap { opacity: 0; }
+/* une affiche qui s'allume brille un instant, comme une ampoule */
+.wall.typing .wall-p.on { animation: wall-light .6s ease-out; }
+@keyframes wall-light { from { filter: brightness(2.2) saturate(.4); } }
 .hero.hold .th.on .bar { animation-play-state: paused; }
 /* sur les fiches, le reflet s'arrête avant le bas de l'image (sinon une marque apparaît) */
 .detail .glow { bottom: 0; height: 62%; }
@@ -824,7 +846,10 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 @media (max-width: 1100px) {
   .hd-search { width: 42px; padding: 0; justify-content: center; background: none; }
-  .hd-search span, .hd-search kbd { display: none; }
+  .hd-search input, .hd-search kbd { display: none; }
+  .header.searching .nav { opacity: 0; pointer-events: none; }
+  .header.searching .hd-search { width: 300px; padding: 0 6px 0 14px; justify-content: flex-start; }
+  .header.searching .hd-search input { display: block; }
 }
 @media (max-width: 1080px) {
   :root { --px: 36px; }
@@ -897,8 +922,12 @@ input, select, textarea { font: inherit; color: inherit; }
   .synopsis { font-size: 15px; }
   .episodes { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .modal-bg { padding-top: 8vh; }
-  .palette-in input { height: 56px; font-size: 16px; }
-  .palette-item small { display: none; }
+  .header.searching .nav { display: none; }
+  .header.searching .hd-act { grid-column: 2 / 4; justify-self: stretch; }
+  .header.searching .hd-search { flex: 1; width: auto; }
+  .header.searching .hd-search input { font-size: 16px; }
+  .wall-info { padding: 0 10px 10px; }
+  .wall-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 7px; padding: 0 10px 30px; }
 }
 @media (max-width: 370px) {
   .nav-div { display: none; }

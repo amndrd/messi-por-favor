@@ -68,7 +68,12 @@
     <a href="/catalogue?type=serie" data-link data-tab="series"><svg class="ic" aria-hidden="true"><use href="#i-tv"/></svg><span>Séries</span></a>
   </nav>
   <div class="hd-act glass">
-    <button class="hd-search" id="palette-btn" aria-label="Rechercher" title="Rechercher (⌘K)"><svg class="ic"><use href="#i-search"/></svg><span>Un film, une série…</span><kbd>⌘K</kbd></button>
+    <div class="hd-search" id="search-box" title="Rechercher (⌘K)"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+      <label class="sr-only" for="search-in">Rechercher un film ou une série</label>
+      <input id="search-in" type="search" autocomplete="off" spellcheck="false" placeholder="Un film, une série…">
+      <kbd>⌘K</kbd>
+      <button class="hd-clear" id="search-close" type="button" aria-label="Fermer la recherche" title="Fermer (Échap)" hidden><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
     <span class="nav-div" aria-hidden="true"></span>
     <button class="hd-ic" id="quit-btn" aria-label="Éjecter le disque" title="Éjecter : arrête le site pour pouvoir débrancher le disque"><svg class="ic"><use href="#i-eject"/></svg></button>
   </div>
