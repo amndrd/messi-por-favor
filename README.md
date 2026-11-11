@@ -1,57 +1,113 @@
-# WATCHIT
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="WATCHIT icon">
+</p>
 
-Les films d'un disque dur, dans le navigateur. On branche le disque, on double-clique sur « ▶ WATCH » et le site s'ouvre : pas de compte, pas d'internet, rien à installer. Pensé pour prêter le disque à quelqu'un.
+<h1 align="center">WATCHIT</h1>
 
-Node.js sans dépendance, HTML, CSS et JavaScript sans framework ni étape de build.
+<p align="center">
+  <b>Your movies on a hard drive, as your own streaming site.</b><br>
+  Plug the drive into a Mac, double-click ▶ WATCH, and your films and series open in the browser. No account, no internet, nothing to install.
+</p>
 
-## Ce qu'il y a dedans
+<p align="center">
+  <img alt="macOS 11+" src="https://img.shields.io/badge/macOS-11%2B-black?logo=apple">
+  <img alt="Works offline" src="https://img.shields.io/badge/works-offline-2ea44f">
+  <img alt="Node.js, no dependencies" src="https://img.shields.io/badge/Node.js-no%20dependencies-5FA04E?logo=nodedotjs&logoColor=white">
+  <img alt="Vanilla JavaScript" src="https://img.shields.io/badge/JavaScript-no%20framework-F7DF1E?logo=javascript&logoColor=black">
+</p>
 
-- **Accueil façon plateforme de streaming** : une grande image qui fait défiler plusieurs films (avec un léger zoom et une lueur prise dans la couleur de l'image), puis des rangées Reprendre, Nouveautés, Les mieux notés, Collections, Séries, Par genre, Les classiques…
-- **Catalogue** : frise des années à poignées, genres en vignettes, barre de filtres collante (type, période, genre, tri), affichage en affiches ou en liste, rangement par décennie, aperçu au survol.
-- **Recherche, le mur d'affiches** (⌘K) : toutes les affiches du disque ; en tapant, celles qui correspondent s'allument et passent devant.
-- **Collections** à voir dans l'ordre, **fiches** de films et de séries, épisodes par saison.
-- **Lecteur** : reprise là où on s'était arrêté, sous-titres et pistes audio (FFmpeg), raccourcis clavier.
-- **La taupe** : la mascotte sort de son trou à l'ouverture et explose en popcorn (Web Animations API, sans bibliothèque). Elle sert aussi de logo, de favicon et d'icône de l'app.
+<p align="center">
+  <a href="README.fr.md">🇫🇷 Lire en français</a>
+</p>
 
-## Comment ça marche
+![WATCHIT on a Mac: the home page, a film projected on a cinema screen](docs/screenshots/hero.jpg)
 
-- `server.js` lit les vidéos du **dossier parent** (MOVIES, sur le disque) et sert le site sur `127.0.0.1`, ports 8777 à 8796. Il s'arrête seul 90 s après la fermeture de la dernière page, pour qu'on puisse éjecter le disque.
-- `catalogue.json` contient les fiches (titre, année, note, résumé, affiche, image de fond). Une vidéo du disque sans fiche s'affiche quand même, avec le nom du fichier ; les épisodes `SxxEyy` sont rattachés à leur série.
-- `progression.json` garde où on en est, sur le disque.
-- `outils/lanceur/` contient l'app « ▶ WATCH » (Swift) : elle lance le serveur avec le Node du disque et ouvre le navigateur.
+## What it does
 
-```
-WATCHIT (site)/
-├── server.js            le serveur (Node.js, aucune dépendance)
-├── index.html           la page unique du site
-├── css/                 style.css (interface), fonts.css (polices locales)
-├── js/                  app.js (interface), intro.js + pop-styles.js (intro de la taupe)
-├── fonts/               Archivo et Inter, embarquées (le site marche hors ligne)
-├── images/              favicon ; les images des films ne sont pas dans le dépôt
-├── outils/lanceur/      l'app du disque : main.swift, construire.sh, icône
-├── catalogue.exemple.json
-└── LISEZ-MOI.txt        le mode d'emploi pour la personne qui reçoit le disque
-```
+### A cinema screen at home
 
-**Pas dans le dépôt** : `catalogue.json`, `progression.json` et `cache/` (données personnelles), les affiches et images des films, et les binaires de Node.js et FFmpeg (`outils/node-*`, `outils/ffmpeg-*`, `outils/ffprobe-*`, environ 500 Mo).
+The home page projects one film at a time on a screen with rounded corners, a soft halo of its colors around it. The title is drawn with the film's own logo, under the director's name and a line of credits. It moves on to the next film by itself.
 
-## Lancer le site pour travailler dessus
+<p align="center">
+  <img src="docs/screenshots/home.gif" alt="The home page: the drive's logo, then a film on the cinema screen, then the next one" width="100%">
+</p>
 
-Il faut Node.js (22 ou plus) et, pour les sous-titres et les pistes audio, FFmpeg (`brew install ffmpeg`).
+### Hover for a preview
 
-```sh
-cp catalogue.exemple.json catalogue.json   # facultatif : sans catalogue, les vidéos s'affichent avec leur nom de fichier
-WATCHIT_OUTILS_SYSTEME=1 node server.js
-```
+Rest the pointer on a poster: a light in the film's colors glows behind it. Stay a moment and a preview slides out of the poster, with a scene, the synopsis and a Play button.
 
-Variables utiles : `WATCHIT_OUTILS_SYSTEME=1` (Node et FFmpeg du Mac plutôt que ceux du disque), `PORT=8799`, `NO_OPEN=1` (ne pas ouvrir le navigateur), `WATCHIT_NO_AUTOSTOP=1` (ne jamais s'arrêter seul), `WATCHIT_DELAI=<secondes>`.
+<p align="center">
+  <img src="docs/screenshots/hover.gif" alt="Posters light up in their colors and open a preview card" width="100%">
+</p>
 
-Les vidéos sont cherchées dans le dossier au-dessus de celui du site.
+### ⌘ K · Find anything
 
-## Préparer un disque
+A wall of posters that narrows down as you type: titles, directors, actors, years.
 
-1. Ranger les vidéos et le dossier du site dans un dossier `MOVIES` à la racine du disque : à la racine, il ne reste que `▶ WATCH` et `MOVIES`.
-2. Ajouter dans `outils/` les binaires pour Mac Apple Silicon et Intel : `node-arm64`, `node-x64` ([nodejs.org](https://nodejs.org)), `ffmpeg-arm64`, `ffmpeg-x64`, `ffprobe-arm64`, `ffprobe-x64` (versions statiques, par exemple [ffmpeg.martin-riedl.de](https://ffmpeg.martin-riedl.de)).
-3. Fabriquer le bouton : `outils/lanceur/construire.sh` (il faut Xcode ou les outils en ligne de commande). L'app « ▶ WATCH » apparaît à la racine du disque.
+<p align="center">
+  <img src="docs/screenshots/search.gif" alt="⌘ K opens the search; typing a director's name keeps only his films" width="100%">
+</p>
 
-Le disque doit être au format Mac (APFS ou HFS+) : l'app a besoin de l'autorisation « accéder à un volume amovible », que macOS ne demande que pour un vrai exécutable signé (d'où l'app en Swift plutôt qu'un script).
+### Browse by year and genre
+
+The catalogue lays every year on the drive out on a timeline: drag across it to pick a period. Genres come as tiles, each with a scene from its best film.
+
+<p align="center">
+  <img src="docs/screenshots/catalogue.gif" alt="The timeline of years, a period dragged across it, then a genre" width="100%">
+</p>
+
+### Directors and actors
+
+Every film shows its director and cast. Click a name to open their page: a portrait, a short biography, and all their films on the drive along a timeline. The catalogue has a page of its own for them, with a search.
+
+<p align="center">
+  <img src="docs/screenshots/people.gif" alt="From a film's cast to the director's page, his films on a timeline" width="100%">
+</p>
+
+### Collections, in order
+
+Sagas are shown as slices of their films; each one opens up under the pointer. ▶ plays the next film you haven't seen.
+
+<p align="center">
+  <img src="docs/screenshots/collections.gif" alt="A collection's slices open one by one under the pointer" width="100%">
+</p>
+
+### Light or dark
+
+A dark cinema, or a warm paper page. Images keep their dark veil either way, and the button bars turn to smoked glass.
+
+<p align="center">
+  <img src="docs/screenshots/theme.gif" alt="Settings: the site switches to the light theme" width="100%">
+</p>
+
+### A screensaver for your films
+
+Leave it alone for a few minutes and the films parade by: scenes in full screen, or a wall of posters drifting slowly, one lighting up now and then.
+
+<p align="center">
+  <img src="docs/screenshots/screensaver.gif" alt="The screensaver: a wall of posters drifting" width="100%">
+</p>
+
+### Ends like a movie
+
+⏏ stops the site so the drive can be ejected. The last screen reminds you where you stopped.
+
+<p align="center">
+  <img src="docs/screenshots/closing.gif" alt="The closing screen: the show is over, and the film to pick up next time" width="100%">
+</p>
+
+### Some details
+
+- Picks up where you left off, film or episode. Progress is saved on the drive itself, so it follows the drive to another Mac.
+- Plays the drive's videos as they are, with their subtitles and audio tracks.
+- A film or series dropped into the drive's folder shows up on its own.
+- Keyboard: ⌘ K to search, Esc to close, Space to pause.
+- The site stops by itself a minute and a half after its last tab is closed.
+- The interface is in French.
+
+## How it's made
+
+- A Node.js server with no dependencies; HTML, CSS and JavaScript, no framework, no build step.
+- Node and FFmpeg travel on the drive, so the Mac needs nothing installed.
+- Film details, logos, casts and portraits are fetched once from [TMDB](https://www.themoviedb.org) by small scripts, then stay on the drive: the site works without internet.
+- ▶ WATCH is a small Swift app that starts the site and opens the browser.
