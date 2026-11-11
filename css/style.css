@@ -224,8 +224,8 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Affiche manquante (ou pas encore chargée) */
 .ph { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; background: linear-gradient(160deg, var(--s2), var(--s1)); color: #3a3a44; }
 .ph svg { width: 26%; max-width: 44px; height: auto; }
-.cp .im > img, .cl .im > img, .ck .im > img, .ep-thumb > img, .cat-th > img, .pv-im > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s, transform .5s var(--ease); }
-.cp .im > img.ok, .cl .im > img.ok, .ck .im > img.ok, .ep-thumb > img.ok, .cat-th > img.ok, .pv-im > img.ok { opacity: 1; }
+.cp .im > img, .cl .im > img, .ck .im > img, .ep-thumb > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s, transform .5s var(--ease); }
+.cp .im > img.ok, .cl .im > img.ok, .ck .im > img.ok, .ep-thumb > img.ok { opacity: 1; }
 .prog { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3; height: 4px; border-radius: 4px; background: rgba(255,255,255,.25); overflow: hidden; }
 .prog i { display: block; height: 100%; background: #fff; border-radius: 4px; }
 

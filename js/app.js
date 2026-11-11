@@ -123,8 +123,11 @@ const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().rep
 // Motif discret tant que l'image n'est pas chargée (il reste si elle manque)
 const placeholder = () => `<span class="ph" aria-hidden="true">${icon('film', '')}</span>`;
 // L'image apparaît en fondu par-dessus le motif ; si elle manque, le motif reste
-const imgTag = (src) => src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="this.remove()">` : '';
-const posterHtml = (src) => placeholder() + imgTag(src);
+const imgTag = (src, full) => src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="${full && full !== src ? `this.onerror=null;this.src='${esc(full)}'` : 'this.remove()'}">` : '';
+// la petite version d'une image du disque (outils/images.js), pour les cartes : bien plus légère à charger et à afficher
+const thumbUrl = (u) => u && u.startsWith('/images/') && !u.startsWith('/images/min/') ? '/images/min/' + u.slice(8) : u;
+const thumbTag = (src) => imgTag(thumbUrl(src), src);
+const posterHtml = (src) => placeholder() + thumbTag(src);
 const bgUrl = (src) => `url(&quot;${esc(String(src).replace(/"/g, '%22'))}&quot;)`;
 const logoFace = () => $('.header .logo-face')?.outerHTML || '';
 
@@ -224,7 +227,7 @@ const resumeCard = ({ it, ep, p }) => {
   const pct = p.duration ? Math.min(100, p.ts / p.duration * 100) : 0;
   const sub = ep ? `${epLabel(ep, it)}${ep.title ? ', ' + ep.title : ''}` : [it.year, fmtShort(it.duration)].filter(Boolean).join(', ');
   return `<div class="cl">
-    <button class="im" type="button" data-resume="${esc(it.key)}" aria-label="Reprendre ${esc(it.title)}">${placeholder()}${imgTag(img)}
+    <button class="im" type="button" data-resume="${esc(it.key)}" aria-label="Reprendre ${esc(it.title)}">${placeholder()}${thumbTag(img)}
       <span class="left">${fmtLeft(p.duration - p.ts)}</span><span class="pb"><i style="width:${pct}%"></i></span><span class="pl">${icon('play')}</span></button>
     <a href="/${it.kind}/${esc(it.id)}" data-link><b>${esc(it.title)}</b></a><small>${esc(sub)}</small>
   </div>`;
@@ -242,6 +245,47 @@ const colCard = (c) => `<a class="cc" href="/collection/${esc(c.id)}" data-link>
       ? `<img src="${esc(f.poster)}" alt="" loading="lazy" style="left:${FAN[j][0]}px;top:${FAN[j][1]}px;transform:rotate(${FAN[j][2]}deg);z-index:${j === 1 ? 3 : 2}">` : '').join('')}</span>
     <span class="t"><small>${c.films.length} films${c.years ? ', ' + esc(c.years) : ''}</small><h3>${esc(c.title)}</h3></span>
   </a>`;
+
+// Collection en tranches (page Collections) : une scène par film, dans l'ordre de la
+// collection ; au survol, la tranche s'élargit et donne le titre du film.
+// Le film à lancer : le premier pas encore terminé.
+const colNext = (c) => {
+  const i = Math.max(0, c.films.findIndex(f => progressPct(f.id) < 90));
+  return { i, film: c.films[i], started: progressPct(c.films[i].id) > 0, done: c.films.every(f => progressPct(f.id) >= 90) };
+};
+// « Star Wars: Episode IV - A New Hope » → « Episode IV - A New Hope » quand tous les films partagent le début
+const sliceTitle = (f, c) => {
+  const pre = f.title.split(': ')[0];
+  return f.title.includes(': ') && c.films.every(x => x.title.startsWith(pre + ': ')) ? f.title.slice(pre.length + 2) : f.title;
+};
+const colSlices = (c, w) => {
+  const n = c.films.length, nx = colNext(c);
+  const label = nx.done ? 'Revoir' : nx.started ? 'Reprendre' : nx.i ? `Film ${nx.i + 1}` : 'Commencer';
+  return `<div class="cs w${w}">
+    <a class="cs-in" href="/collection/${esc(c.id)}" data-link aria-label="${esc(c.title)}, ${n} films">
+      ${c.films.map((f, k) => {
+        const p = progressPct(f.id);
+        return `<span class="sl">${imgTag(f.backdrop || f.poster)}<span class="no" aria-hidden="true">${k + 1}</span>
+          ${p >= 90 ? `<span class="vu" title="Déjà vu">${icon('check')}</span>` : ''}
+          <span class="ft"><b>${esc(sliceTitle(f, c))}</b><small>${[f.year, fmtShort(f.duration)].filter(Boolean).map(esc).join(' · ')}</small></span>
+          ${p > 0 && p < 90 ? `<span class="pr"><i style="width:${p}%"></i></span>` : ''}</span>`;
+      }).join('')}
+      <span class="t"><small>${[`${n} film${n > 1 ? 's' : ''}`, c.years, c.minutes ? fmtShort(c.minutes) : ''].filter(Boolean).map(esc).join(' · ')}</small><h3>${esc(c.title)}</h3></span>
+    </a>
+    <button class="cs-go" type="button" data-col="${esc(c.id)}" aria-label="${label} : ${esc(nx.film.title)}">${icon('play')}${label}</button>
+  </div>`;
+};
+// Largeur des cartes sur 12 colonnes : 5 films et plus en pleine largeur, 3–4 films par deux,
+// 1–2 films par trois ; une carte qui resterait seule au bout de sa ligne s'élargit.
+const colLayout = (cols) => {
+  const span = (c) => c.films.length >= 5 ? 12 : c.films.length >= 3 ? 6 : 4;
+  const list = [...cols].sort((a, b) => b.films.length - a.films.length || a.title.localeCompare(b.title, 'fr')).map(c => ({ c, w: span(c) }));
+  const six = list.filter(x => x.w === 6), four = list.filter(x => x.w === 4);
+  if (six.length % 2) six[six.length - 1].w = 12;
+  if (four.length % 3 === 1) four[four.length - 1].w = 12;
+  if (four.length % 3 === 2) four.slice(-2).forEach(x => { x.w = 6; });
+  return list;
+};
 
 // Genre : la plus belle image du genre, teintée d'une couleur qui lui est propre
 const GENRE_TINT = {
@@ -315,17 +359,16 @@ const showPreview = (c) => {
   const w = Math.round(Math.max(320, Math.min(380, r.width * 2)));
   const el = document.createElement('div');
   el.className = 'pv';
-  el.innerHTML = `<a class="pv-im" href="/${it.kind}/${esc(it.id)}" data-link tabindex="-1">${placeholder()}${imgTag(it.backdrop || it.poster)}<b>${esc(it.title)}</b></a>
-    <div class="pv-bd"><div class="meta">${metaHtml(it.rating, [it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it), it.director])}</div>
-      ${it.genres.length ? `<div class="pv-gs">${it.genres.slice(0, 3).map(g => `<i style="--g:${GENRE_TINT[g] || '90,90,100'}">${esc(g)}</i>`).join('')}</div>` : ''}
-      ${it.description ? `<p>${esc(it.description)}</p>` : ''}
-      <div class="pv-bt"><button class="btn play" type="button" data-pv="play">${icon('play')}${itemProgress(it) ? 'Reprendre' : 'Lecture'}</button>
-        <a class="btn glass" href="/${it.kind}/${esc(it.id)}" data-link>${icon('info')}Fiche</a></div></div>`;
-  el.style.width = w + 'px';
-  const vw = document.documentElement.clientWidth;
-  el.style.left = Math.max(scrollX + 12, Math.min(scrollX + vw - w - 12, r.left + scrollX + r.width / 2 - w / 2)) + 'px';
-  const img = $('img', c);
-  const t = img && img.complete && img.naturalWidth && tintOf(img);
+  el.innerHTML = `<div class="pv-c"><a class="pv-im" href="${href}" data-link tabindex="-1">${it.backdrop || it.poster ? `<img src="${esc(it.backdrop || it.poster)}" alt="">` : ''}
+      <b${it.title.length > 24 ? ' class="l"' : ''}>${esc(it.title)}</b></a>
+    <div class="pv-bd"><p class="pv-m">${star}${meta.map(esc).join('<i></i>')}</p>
+      ${it.genres.length ? `<p class="pv-g">${esc(it.genres.slice(0, 3).join(', '))}</p>` : ''}
+      ${it.description ? `<p class="pv-s">${esc(it.description)}</p>` : ''}
+      <div class="pv-a"><button class="pv-play" type="button" data-pv="play">${icon('play')}${itemProgress(it) ? 'Reprendre' : 'Lecture'}</button>
+        <a class="pv-rd" href="${href}" data-link aria-label="Fiche" title="Fiche">${icon('info')}</a>
+        <span class="pv-ty">${esc(TYPES[it.type] || '')}</span></div></div></div>`;
+  el.style.width = W + 'px';
+  const img = $('img', c), t = c.style.getPropertyValue('--ct') || (img && img.complete && img.naturalWidth && tintOf(img));
   if (t) el.style.setProperty('--ct', t);
   document.body.append(el);
   // sous la barre du haut, et sans dépasser le bas de l'écran
@@ -589,17 +632,6 @@ const filterItems = (f) => {
   }[f.sort];
   return list.sort(by);
 };
-
-// Une ligne du mode liste : image du film, réalisateur, genres, résumé, note, Lecture
-const listRow = (it) => `<a class="cat-row" href="/${it.kind}/${esc(it.id)}" data-link>
-    <span class="cat-th">${placeholder()}${imgTag(it.backdrop || it.poster)}</span>
-    <span class="cat-tx"><b>${esc(it.title)}</b>
-      <small>${isNew(it) ? '<i class="nw" title="Nouveau sur le disque"></i>' : ''}${esc([it.director, it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it)].filter(Boolean).join(', '))}</small>
-      ${it.genres.length ? `<span class="cat-gs">${it.genres.slice(0, 3).map(g => `<i style="--g:${GENRE_TINT[g] || '90,90,100'}">${esc(g)}</i>`).join('')}</span>` : ''}
-      ${it.description ? `<span class="cat-syn">${esc(it.description)}</span>` : ''}</span>
-    <span class="cat-rs">${it.rating ? `<span class="cat-rt">${icon('star')}${fmtRating(it.rating)}</span>` : ''}
-      <span class="cat-pl" data-play="${esc(it.key)}" role="button" tabindex="-1" aria-label="Lecture de ${esc(it.title)}">${icon('play')}</span></span>
-  </a>`;
 
 const viewCatalogue = () => {
   const f = readFilters();
