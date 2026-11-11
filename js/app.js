@@ -1386,8 +1386,7 @@ const viewSettings = () => {
       <span class="st-scr"${sample && sample.backdrop ? ` style="--pimg:${bgUrl(sample.backdrop)}"` : ''}></span>
       <span class="st-row"><span></span><span></span><span></span><span></span></span></span>`;
   view.innerHTML = `<div class="page set">
-    <header class="page-head"><div><h1 class="page-title">Réglages</h1>
-      <p class="page-sub">Gardés dans ce navigateur, sur cet ordinateur.</p></div></header>
+    <header class="page-head"><div><h1 class="page-title">Réglages</h1></div></header>
     <section class="set-sec" aria-labelledby="set-theme">
       <div class="set-h"><h2 id="set-theme">Apparence</h2>
         <p>Le site en sombre ou en clair.</p></div>
