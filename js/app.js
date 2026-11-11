@@ -1742,6 +1742,10 @@ const init = async () => {
   loadData(data);
   connect();
   render();
+  // sans animation de chargement (déjà vue dans cet onglet), l'entrée se joue tout de suite
+  if (!document.querySelector('.arrivee')) entrance();
+  // l'écran d'arrivée (js/arrivee.js) peut s'effacer (ces chiffres servaient au ticket d'entrée, mis de côté)
+  window.mpfPret?.({ films: (data.films || []).length, series: (data.series || []).length, episodes: S.episodes.length, collections: S.collections.length });
 };
 init();
 })();
