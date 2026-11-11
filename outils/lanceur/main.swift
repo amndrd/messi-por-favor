@@ -1,19 +1,24 @@
-// Messi por favor — l'app du disque (« ▶ Messi por favor » à la racine du disque).
+// WATCH — l'app du disque (« ▶ WATCH » en tête du disque), qui ouvre le site WATCHIT.
 //
 // Démarre le site (outils/node-… server.js), ouvre le navigateur quand il est prêt,
 // et reste dans le Dock tant qu'il tourne. Quitter l'app arrête le site ; si le site
 // s'arrête tout seul (page fermée), l'app se ferme aussi.
 //
 // C'est une vraie app (et pas un script) pour que macOS sache à qui demander
-// l'autorisation de lire le disque : « Messi por favor souhaite accéder… ».
+// l'autorisation de lire le disque : « WATCH souhaite accéder… ».
 //
 // Compilation : voir construire.sh, dans ce dossier.
 
 import Cocoa
 
 final class Lanceur: NSObject, NSApplicationDelegate {
-    private let site = Bundle.main.bundleURL.deletingLastPathComponent()
-        .appendingPathComponent("Messi por favor (site)")
+    // Le site est rangé dans le dossier MOVIES, à côté de ce bouton (sur un ancien disque : juste à côté)
+    private lazy var site: URL = {
+        let disque = Bundle.main.bundleURL.deletingLastPathComponent()
+        let range = disque.appendingPathComponent("MOVIES/WATCHIT (site)")
+        return FileManager.default.fileExists(atPath: range.appendingPathComponent("server.js").path)
+            ? range : disque.appendingPathComponent("WATCHIT (site)")
+    }()
     private var server: Process?
     private var pipe: Pipe?
     private var port: Int?
@@ -28,11 +33,11 @@ final class Lanceur: NSObject, NSApplicationDelegate {
         buildMenu()
         let big = OperatingSystemVersion(majorVersion: 11, minorVersion: 0, patchVersion: 0)
         guard ProcessInfo.processInfo.isOperatingSystemAtLeast(big) else {
-            return fail("Ce Mac est trop ancien pour Messi por favor : il faut macOS 11 (Big Sur) ou plus récent.\n\nLes films restent lisibles directement depuis le disque.")
+            return fail("Ce Mac est trop ancien pour WATCH : il faut macOS 11 (Big Sur) ou plus récent.\n\nLes films restent lisibles directement depuis le disque.")
         }
         let script = site.appendingPathComponent("server.js")
         guard FileManager.default.fileExists(atPath: script.path) else {
-            return fail("Le dossier « Messi por favor (site) » est introuvable. Il doit rester sur le disque, à côté de ce bouton.")
+            return fail("Le dossier « WATCHIT (site) » est introuvable. Il doit rester sur le disque, dans le dossier MOVIES, à côté de ce bouton.")
         }
         #if arch(arm64)
         let arch = "arm64"
@@ -40,7 +45,7 @@ final class Lanceur: NSObject, NSApplicationDelegate {
         let arch = "x64"
         #endif
         let env = ProcessInfo.processInfo.environment
-        let node = env["MESSI_NODE"].map { URL(fileURLWithPath: $0) }
+        let node = env["WATCHIT_NODE"].map { URL(fileURLWithPath: $0) }
             ?? site.appendingPathComponent("outils/node-\(arch)")
 
         let logURL = site.appendingPathComponent("cache/journal.txt")
@@ -54,7 +59,7 @@ final class Lanceur: NSObject, NSApplicationDelegate {
         p.arguments = [script.path]
         p.currentDirectoryURL = site
         var childEnv = env
-        childEnv["MESSI_APP"] = "1"
+        childEnv["WATCHIT_APP"] = "1"
         p.environment = childEnv
         let out = Pipe()
         p.standardOutput = out
@@ -72,7 +77,7 @@ final class Lanceur: NSObject, NSApplicationDelegate {
         do {
             try p.run()
         } catch {
-            return fail("Messi por favor n'a pas pu démarrer.\n\n\(error.localizedDescription)")
+            return fail("WATCH n'a pas pu démarrer.\n\n\(error.localizedDescription)")
         }
         server = p
         pipe = out
@@ -92,7 +97,7 @@ final class Lanceur: NSObject, NSApplicationDelegate {
 
     private func handle(_ line: String) {
         let parts = line.split(separator: " ")
-        if parts.count == 2, parts[0] == "MESSI_PRET" || parts[0] == "MESSI_DEJA", let p = Int(parts[1]) {
+        if parts.count == 2, parts[0] == "WATCHIT_PRET" || parts[0] == "WATCHIT_DEJA", let p = Int(parts[1]) {
             port = p
             openSite()
             return
@@ -113,9 +118,9 @@ final class Lanceur: NSObject, NSApplicationDelegate {
             let text = lastLines.joined(separator: "\n")
             if text.range(of: "EPERM", options: .caseInsensitive) != nil
                 || text.range(of: "not permitted", options: .caseInsensitive) != nil {
-                return fail("macOS a refusé l'accès au disque.\n\nOuvre Réglages Système → Confidentialité et sécurité → Fichiers et dossiers, autorise « Messi por favor » à lire les volumes amovibles, puis double-clique à nouveau sur le bouton.")
+                return fail("macOS a refusé l'accès au disque.\n\nOuvre Réglages Système → Confidentialité et sécurité → Fichiers et dossiers, autorise « WATCH » à lire les volumes amovibles, puis double-clique à nouveau sur le bouton.")
             }
-            return fail("Messi por favor n'a pas pu démarrer.\n\n" + lastLines.suffix(5).joined(separator: "\n"))
+            return fail("WATCH n'a pas pu démarrer.\n\n" + lastLines.suffix(5).joined(separator: "\n"))
         }
         NSApp.terminate(nil)
     }
@@ -160,7 +165,7 @@ final class Lanceur: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Messi por favor"
+        alert.messageText = "WATCH"
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
@@ -174,7 +179,7 @@ final class Lanceur: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Ouvrir le site", action: #selector(openSite), keyEquivalent: "o")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quitter Messi por favor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quitter WATCH", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.submenu = menu
         NSApp.mainMenu = main
     }

@@ -1,5 +1,5 @@
 /**
- * Messi por favor — version disque dur
+ * WATCHIT — version disque dur
  *
  * Le site vit dans ce dossier, sur le disque des films. Il tourne sur l'ordi de la
  * personne qui branche le disque (http://localhost), sans compte ni internet.
@@ -22,16 +22,16 @@ const os     = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 
-const APP_ID   = 'messi-por-favor';
+const APP_ID   = 'watchit';
 const SITE     = __dirname;                 // ce dossier
 const DISK     = path.dirname(SITE);        // le dossier des vidéos (MOVIES), parent de ce dossier
 const CATALOG  = path.join(SITE, 'catalogue.json');
 const STATE    = path.join(SITE, 'progression.json');
 const CACHE    = path.join(SITE, 'cache');  // sous-titres extraits (gardés d'une fois sur l'autre)
-const FROM_APP = !!process.env.MESSI_APP;   // lancé par l'app du disque
+const FROM_APP = !!process.env.WATCHIT_APP;   // lancé par l'app du disque
 const PORTS    = Array.from({ length: 20 }, (_, i) => 8777 + i);
-const IDLE_MS  = (+process.env.MESSI_DELAI || 90) * 1000;      // arrêt 1 min 30 après la fermeture de la dernière page
-const FIRST_MS = (+process.env.MESSI_DELAI || 300) * 1000;     // … ou 5 min si aucune page ne s'est jamais ouverte
+const IDLE_MS  = (+process.env.WATCHIT_DELAI || 90) * 1000;      // arrêt 1 min 30 après la fermeture de la dernière page
+const FIRST_MS = (+process.env.WATCHIT_DELAI || 300) * 1000;     // … ou 5 min si aucune page ne s'est jamais ouverte
 const VIDEO_EXTS = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv']);
 
 try { fs.mkdirSync(CACHE, { recursive: true }); } catch (e) {}
@@ -46,7 +46,7 @@ const tellApp = (msg) => { try { fs.writeSync(1, msg + '\n'); } catch (e) {} };
 // Ceux du dossier outils/ d'abord (rien à installer), sinon ceux de l'ordi
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64';
 const findTool = (name) => {
-  const local = process.env.MESSI_OUTILS_SYSTEME ? [] : [path.join(SITE, 'outils', `${name}-${ARCH}`)];
+  const local = process.env.WATCHIT_OUTILS_SYSTEME ? [] : [path.join(SITE, 'outils', `${name}-${ARCH}`)];
   for (const p of [...local, `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`, name]) {
     try { if (spawnSync(p, ['-version'], { stdio: 'ignore', timeout: 15000 }).status === 0) return p; } catch (e) {}
   }
@@ -337,7 +337,7 @@ const extractSubtitle = (filePath, index) => {
 
 // ─── AUTRE PISTE AUDIO : copie de la vidéo avec cette piste ───────────────────
 // Préparée sur l'ordi (dossier temporaire) s'il a la place, sinon sur le disque.
-const AUDIO_DIRS = [path.join(os.tmpdir(), 'messi-por-favor-audio'), path.join(CACHE, 'audio')];
+const AUDIO_DIRS = [path.join(os.tmpdir(), 'watchit-audio'), path.join(CACHE, 'audio')];
 const clearAudio = () => AUDIO_DIRS.forEach(d => { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) {} });
 const freeBytes = (dir) => { try { const s = fs.statfsSync(dir); return s.bavail * s.bsize; } catch (e) { return 0; } };
 const audioJobs = new Map(); // id → { status, path, error }
@@ -368,7 +368,7 @@ const pages = new Set();
 let everOpened = false, idleTimer = null;
 const activity = () => {
   clearTimeout(idleTimer);
-  if (pages.size || streams > 0 || process.env.MESSI_NO_AUTOSTOP) return;
+  if (pages.size || streams > 0 || process.env.WATCHIT_NO_AUTOSTOP) return;
   idleTimer = setTimeout(() => shutdown('plus aucune page ouverte'), everOpened ? IDLE_MS : FIRST_MS);
 };
 let closing = false;
@@ -536,13 +536,13 @@ const listen = (i = 0) => {
   });
   server.listen(port, '127.0.0.1', () => {
     console.log('');
-    console.log('  Messi por favor est ouvert : http://localhost:' + port);
+    console.log('  WATCHIT est ouvert : http://localhost:' + port);
     console.log('  Vidéos lues depuis : ' + DISK);
     console.log('  FFmpeg : ' + (FFMPEG ? 'oui' : 'non (pas de sous-titres ni de changement de langue)'));
     console.log('  Le site s\'arrête tout seul quand on ferme la page.');
     console.log('');
     activity();
-    if (FROM_APP) tellApp('MESSI_PRET ' + port); else openBrowser(port);
+    if (FROM_APP) tellApp('WATCHIT_PRET ' + port); else openBrowser(port);
   });
 };
 
@@ -550,8 +550,8 @@ const listen = (i = 0) => {
   // Déjà ouvert (deuxième clic, ou lanceur de secours) : on rouvre simplement la page
   const running = await findRunning();
   if (running) {
-    if (FROM_APP) tellApp('MESSI_DEJA ' + running);
-    else { console.log('Messi por favor tourne déjà.'); openBrowser(running); }
+    if (FROM_APP) tellApp('WATCHIT_DEJA ' + running);
+    else { console.log('WATCHIT tourne déjà.'); openBrowser(running); }
     return process.exit(0);
   }
   FFMPEG = findTool('ffmpeg');

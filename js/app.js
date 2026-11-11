@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Messi por favor — interface (version disque dur)
+   WATCHIT — interface (version disque dur)
    Accueil, catalogue, collections, fiches et lecteur. Le catalogue vient du
    serveur (/api/data) : seulement ce qui est sur le disque. Pas de compte ;
    la progression est gardée sur le disque.
@@ -886,7 +886,7 @@ const initHero = (picks) => {
 };
 
 const viewHome = () => {
-  document.title = 'Messi por favor';
+  document.title = 'WATCHIT';
   const resume = resumeEntries();
   const byRecent = S.items.slice().sort((a, b) => b.addedAt - a.addedAt);
   const byRating = S.items.filter(it => it.rating).sort((a, b) => b.rating - a.rating);
@@ -1072,7 +1072,7 @@ const viewCatalogue = () => {
   const paintBar = (count) => {
     const title = TYPE_TITLES[f.type] || 'Catalogue';
     $('#cat-title').textContent = title;
-    document.title = title + ' · Messi por favor';
+    document.title = title + ' · WATCHIT';
     $$('#cat-types [data-type]').forEach(b => {
       b.setAttribute('aria-pressed', b.dataset.type === f.type);
       $('small', b).textContent = filterItems({ ...f, type: b.dataset.type }).length;
@@ -1453,7 +1453,7 @@ const viewSettings = () => {
 };
 
 const viewCollections = () => {
-  document.title = 'Collections · Messi por favor';
+  document.title = 'Collections · WATCHIT';
   const n = S.collections.length, films = S.collections.reduce((k, c) => k + c.films.length, 0);
   view.innerHTML = `<div class="page">
     <header class="page-head"><div><h1 class="page-title">Collections</h1>
@@ -1497,7 +1497,7 @@ const viewCollection = (id) => {
     view.innerHTML = `<div class="page"><div class="empty"><b>Cette collection n'existe plus</b><a class="btn glass" href="/collections" data-link>Toutes les collections</a></div></div>`;
     return;
   }
-  document.title = c.title + ' · Messi por favor';
+  document.title = c.title + ' · WATCHIT';
   // Le film à lancer : le premier pas encore terminé, dans l'ordre de la collection
   const nextIdx = Math.max(0, c.films.findIndex(f => progressPct(f.id) < 90));
   const next = c.films[nextIdx], started = progressPct(next.id) > 0;
@@ -1526,7 +1526,7 @@ const viewTitle = (kind, id) => {
     view.innerHTML = `<div class="page"><div class="empty"><b>Ce titre n'est plus sur le disque</b><a class="btn glass" href="/catalogue" data-link>Retour au catalogue</a></div></div>`;
     return;
   }
-  document.title = it.title + ' · Messi por favor';
+  document.title = it.title + ' · WATCHIT';
   const eps = kind === 'serie' ? episodesOf(it.id) : [];
   const bg = it.backdrop || it.poster;
 
@@ -2185,14 +2185,28 @@ const showClosed = () => {
   events?.close();
   if (!player.hidden) closePlayer();
   closeModal();
-  document.title = 'Fermé · Messi por favor';
+  document.title = 'Fermé · WATCHIT';
   $('#offline').hidden = true;
   document.body.classList.add('closed');
   stopHero();
-  view.innerHTML = `<div class="closed-screen">${logoFace()}
-    <h1 class="display">Messi por favor est fermé</h1>
-    <p>Tu peux fermer cet onglet et éjecter le disque.</p>
-    <p class="hint">Pour revenir : double-clique sur « ▶ Messi por favor », tout en haut du disque.</p>
+  // « Fin de séance » : où l'on s'est arrêté, pour savoir où reprendre la prochaine fois
+  const last = resumeEntries()[0];
+  let card = '', bg = '';
+  if (last) {
+    const { it, ep, p } = last;
+    const img = (ep && imgUrl(ep.thumb)) || it.backdrop || it.poster;
+    const pct = Math.min(100, Math.round(p.ts / p.duration * 100));
+    bg = it.backdrop ? `<div class="closed-bg" aria-hidden="true">${thumbTag(it.backdrop)}</div>` : '';
+    card = `<div class="closed-last"><span class="closed-th">${placeholder()}${thumbTag(img)}</span>
+      <span><small>Tu t'es arrêté à</small><b>${esc(it.title)}</b>${ep ? `<span class="closed-ep">${esc(epLabel(ep, it))}</span>` : ''}
+        <span class="closed-pg"><i><u style="width:${pct}%"></u></i><em>${esc(fmtLeft(p.duration - p.ts))}</em></span></span></div>`;
+  }
+  view.innerHTML = `<div class="closed-screen">${bg}
+    <div class="closed-wm">${logoMark()}<span>WATCHIT</span></div>
+    <h1 class="display">La séance est terminée</h1>
+    <p>Le site est arrêté : tu peux fermer cet onglet et éjecter le disque.</p>
+    ${card}
+    <p class="closed-hint">Pour revenir, double-clique sur <b>▶ WATCH</b> tout en haut du disque</p>
   </div>`;
 };
 $('#quit-btn').addEventListener('click', async () => {

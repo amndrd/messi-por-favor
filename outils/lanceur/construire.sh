@@ -1,21 +1,24 @@
 #!/bin/bash
-# Fabrique « ▶ Messi por favor.app » à la racine du disque à partir de main.swift.
+# Fabrique « ▶ WATCH.app » à la racine du disque à partir de main.swift
+# (le « ▶ » la place en tête du disque dans le Finder ; le Dock affiche « WATCH »).
 # Il faut Xcode (ou les outils en ligne de commande). Seulement pour modifier le bouton :
 # la personne qui reçoit le disque n'en a pas besoin.
 set -euo pipefail
 ICI="$(cd "$(dirname "$0")" && pwd)"
-DISQUE="$(cd "$ICI/../../.." && pwd)"
-APP="$DISQUE/▶ Messi por favor.app"
+# le site est dans MOVIES (MOVIES/WATCHIT (site)/outils/lanceur) : l'app va à la racine du disque
+PARENT="$(cd "$ICI/../../.." && pwd)"
+if [ "$(basename "$PARENT")" = "MOVIES" ]; then DISQUE="$(dirname "$PARENT")"; else DISQUE="$PARENT"; fi
+APP="$DISQUE/▶ WATCH.app"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 swiftc -O -target arm64-apple-macos11 "$ICI/main.swift" -o "$TMP/arm64"
 swiftc -O -target x86_64-apple-macos10.15 "$ICI/main.swift" -o "$TMP/x64"
-lipo -create "$TMP/arm64" "$TMP/x64" -output "$TMP/Messi por favor"
+lipo -create "$TMP/arm64" "$TMP/x64" -output "$TMP/WATCH"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$TMP/Messi por favor" "$APP/Contents/MacOS/"
+cp "$TMP/WATCH" "$APP/Contents/MacOS/"
 cp "$ICI/icone.icns" "$APP/Contents/Resources/icone.icns"
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -23,13 +26,13 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 <plist version="1.0">
 <dict>
 	<key>CFBundleExecutable</key>
-	<string>Messi por favor</string>
+	<string>WATCH</string>
 	<key>CFBundleIdentifier</key>
-	<string>local.messi-por-favor</string>
+	<string>local.watchit</string>
 	<key>CFBundleName</key>
-	<string>Messi por favor</string>
+	<string>WATCH</string>
 	<key>CFBundleDisplayName</key>
-	<string>Messi por favor</string>
+	<string>WATCH</string>
 	<key>CFBundleIconFile</key>
 	<string>icone</string>
 	<key>CFBundlePackageType</key>
@@ -45,7 +48,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSRemovableVolumesUsageDescription</key>
-	<string>Messi por favor lit les films de ce disque pour les afficher dans ton navigateur.</string>
+	<string>WATCH lit les films de ce disque pour les afficher dans ton navigateur.</string>
 </dict>
 </plist>
 EOF

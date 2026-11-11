@@ -1,20 +1,18 @@
-MESSI POR FAVOR — le site du disque
-====================================
+WATCHIT — le site du disque
+===========================
 
 POUR REGARDER
 1. Branche le disque sur un Mac.
-2. Double-clique sur « ▶ Messi por favor », tout en haut du disque.
+2. Double-clique sur « ▶ WATCH », tout en haut du disque.
 3. Le site s'ouvre dans le navigateur. Pas de compte, pas besoin d'internet.
-   Une petite intro (la taupe sort de son trou) se joue à l'ouverture :
-   un clic ou une touche la passe.
 
-La première fois, le Mac demande si « Messi por favor » peut accéder aux
+La première fois, le Mac demande si « WATCH » peut accéder aux
 fichiers d'un volume amovible : clique sur « Autoriser ».
-Tant que le site tourne, « Messi por favor » est dans le Dock. Un clic sur
+Tant que le site tourne, « WATCH » est dans le Dock. Un clic sur
 son icône rouvre la page si tu l'as fermée.
 
 POUR ÉJECTER LE DISQUE
-Clique sur « Quitter » en haut à droite du site (ou quitte « Messi por favor »
+Clique sur « Quitter » en haut à droite du site (ou quitte « WATCH »
 dans le Dock), puis éjecte le disque. Si tu fermes simplement l'onglet, le site
 s'arrête tout seul 1 min 30 après.
 
@@ -27,7 +25,9 @@ BON À SAVOIR
   Mac : un PC Windows ne peut pas le lire.
 - Ta progression (« Reprendre ») est enregistrée sur le disque :
   on la retrouve en le branchant sur un autre Mac.
-- Un film ou une série ajouté sur le disque apparaît tout seul dans le site, avec
+- Sur le disque, il n'y a que deux choses : « ▶ WATCH » et le dossier MOVIES,
+  qui contient les films, les séries et ce dossier (« WATCHIT (site) »).
+- Un film ou une série ajouté dans MOVIES apparaît tout seul dans le site, avec
   le nom du fichier. Pour une fiche complète (affiche, résumé, note…), il faut
   l'ajouter dans catalogue.json.
 
@@ -38,5 +38,5 @@ CE QU'IL Y A DANS CE DOSSIER
   progression.json                            progression (créé à l'usage)
   outils/                                     Node.js 22 et FFmpeg 9 pour Mac Apple Silicon
                                               et Intel (lecture, sous-titres, langues)
-  outils/lanceur/                             le code du bouton « ▶ Messi por favor » et son icône
+  outils/lanceur/                             le code du bouton « ▶ WATCH » et son icône
   cache/                                      sous-titres déjà extraits, journal du site

@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Messi por favor — interface « streaming »
+   WATCHIT — interface « streaming »
    Grandes images de films, cartes arrondies, verre dépoli.
    Deux polices : Archivo (titres, étroite et grasse) et Inter (texte).
    La couleur des reflets (--tint) est prise dans l'image du film affiché.
@@ -1325,11 +1325,41 @@ input, select, textarea { font: inherit; color: inherit; }
 .offline .label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #F59E0B; box-shadow: 0 0 10px #F59E0B; }
 .offline p { margin-top: 4px; font-size: 14px; color: var(--body); }
 .closed .header { display: none; }
-.closed-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 0 24px 6vh; text-align: center; }
-.closed-screen .logo-face { height: 64px; color: #fff; margin-bottom: 18px; }
-.closed-screen h1 { font-size: clamp(40px, 6vw, 76px); }
-.closed-screen p { font-size: 17px; color: var(--body); }
-.closed-screen p.hint { font-size: 14.5px; color: var(--muted); }
+/* Écran de fermeture, « fin de séance » : le nom, le message, le dernier film en cours, comment revenir */
+.closed-screen { position: relative; isolation: isolate; overflow: hidden; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px 6vh; text-align: center; }
+.closed-screen::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(6,6,7,0), var(--bg)); }
+.closed-bg { position: absolute; inset: -80px; z-index: -2; opacity: .3; filter: blur(60px) saturate(1.2); }
+.closed-bg img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.2s; }
+.closed-bg img.ok { opacity: 1; }
+.closed-wm { display: flex; align-items: center; gap: 12px; font: 850 22px/1 var(--title); font-variation-settings: 'wdth' 80; letter-spacing: .08em; }
+.closed-wm .logo-mark { height: 30px; width: auto; }
+.closed-screen h1 { margin-top: 34px; font-size: clamp(44px, 7vw, 92px); }
+.closed-screen > p { margin-top: 16px; max-width: 560px; font-size: 17px; color: var(--body); }
+.closed-last { margin-top: 34px; display: flex; align-items: center; gap: 16px; padding: 10px 22px 10px 10px; border-radius: 18px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); text-align: left; box-shadow: 0 24px 50px -24px rgba(0,0,0,.9); }
+.closed-th { position: relative; flex: none; width: 132px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--s2); }
+.closed-th > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .4s; }
+.closed-th > img.ok { opacity: 1; }
+.closed-last small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.closed-last b { display: block; margin-top: 4px; font-size: 17px; font-weight: 700; }
+.closed-ep { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.closed-pg { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.closed-pg i { width: 170px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.18); overflow: hidden; }
+.closed-pg u { display: block; height: 100%; border-radius: inherit; background: #fff; }
+.closed-pg em { font-style: normal; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.closed-screen .closed-hint { margin-top: 22px; display: inline-flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 99px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); font-size: 14px; color: var(--muted); }
+.closed-hint b { padding: 5px 10px; border-radius: 8px; background: #fff; color: #000; font-size: 12.5px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+/* tout arrive en douceur, l'un après l'autre */
+.closed-screen > :not(.closed-bg) { animation: closed-in .9s var(--ease) both; }
+.closed-screen > :nth-child(3) { animation-delay: .08s; }
+.closed-screen > :nth-child(4) { animation-delay: .16s; }
+.closed-screen > :nth-child(5) { animation-delay: .26s; }
+.closed-screen > :nth-child(6) { animation-delay: .36s; }
+@keyframes closed-in { from { opacity: 0; translate: 0 14px; } }
+@media (prefers-reduced-motion: reduce) { .closed-screen > * { animation: none; } }
+@media (max-width: 760px) {
+  .closed-screen .closed-hint { flex-wrap: wrap; justify-content: center; border-radius: 18px; }
+  .closed-pg i { width: 110px; }
+}
 
 /* ══ TAILLES D'ÉCRAN ══════════════════════════════════════════════════════ */
 @media (max-width: 1280px) {

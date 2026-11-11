@@ -1,5 +1,5 @@
 {
-  "_lisezmoi": "Catalogue de Messi por favor. videoRef = chemin de la vidéo depuis la racine du disque. poster / backdrop / thumb = nom d'un fichier du dossier images. Une vidéo du disque absente d'ici s'affiche quand même, avec son nom de fichier. « ignorer » liste les vidéos à ne jamais afficher (doublons).",
+  "_lisezmoi": "Catalogue de WATCHIT. videoRef = chemin de la vidéo depuis la racine du disque. poster / backdrop / thumb = nom d'un fichier du dossier images. Une vidéo du disque absente d'ici s'affiche quand même, avec son nom de fichier. « ignorer » liste les vidéos à ne jamais afficher (doublons).",
   "films": [
     {
       "id": "film-exemple-1",

@@ -1,6 +1,6 @@
-# Messi por favor
+# WATCHIT
 
-Les films d'un disque dur, dans le navigateur. On branche le disque, on double-clique sur « ▶ Messi por favor » et le site s'ouvre : pas de compte, pas d'internet, rien à installer. Pensé pour prêter le disque à quelqu'un.
+Les films d'un disque dur, dans le navigateur. On branche le disque, on double-clique sur « ▶ WATCH » et le site s'ouvre : pas de compte, pas d'internet, rien à installer. Pensé pour prêter le disque à quelqu'un.
 
 Node.js sans dépendance, HTML, CSS et JavaScript sans framework ni étape de build.
 
@@ -15,13 +15,13 @@ Node.js sans dépendance, HTML, CSS et JavaScript sans framework ni étape de bu
 
 ## Comment ça marche
 
-- `server.js` lit les vidéos du **dossier parent** (la racine du disque) et sert le site sur `127.0.0.1`, ports 8777 à 8796. Il s'arrête seul 90 s après la fermeture de la dernière page, pour qu'on puisse éjecter le disque.
+- `server.js` lit les vidéos du **dossier parent** (MOVIES, sur le disque) et sert le site sur `127.0.0.1`, ports 8777 à 8796. Il s'arrête seul 90 s après la fermeture de la dernière page, pour qu'on puisse éjecter le disque.
 - `catalogue.json` contient les fiches (titre, année, note, résumé, affiche, image de fond). Une vidéo du disque sans fiche s'affiche quand même, avec le nom du fichier ; les épisodes `SxxEyy` sont rattachés à leur série.
 - `progression.json` garde où on en est, sur le disque.
-- `outils/lanceur/` contient l'app « ▶ Messi por favor » (Swift) : elle lance le serveur avec le Node du disque et ouvre le navigateur.
+- `outils/lanceur/` contient l'app « ▶ WATCH » (Swift) : elle lance le serveur avec le Node du disque et ouvre le navigateur.
 
 ```
-Messi por favor (site)/
+WATCHIT (site)/
 ├── server.js            le serveur (Node.js, aucune dépendance)
 ├── index.html           la page unique du site
 ├── css/                 style.css (interface), fonts.css (polices locales)
@@ -41,17 +41,17 @@ Il faut Node.js (22 ou plus) et, pour les sous-titres et les pistes audio, FFmpe
 
 ```sh
 cp catalogue.exemple.json catalogue.json   # facultatif : sans catalogue, les vidéos s'affichent avec leur nom de fichier
-MESSI_OUTILS_SYSTEME=1 node server.js
+WATCHIT_OUTILS_SYSTEME=1 node server.js
 ```
 
-Variables utiles : `MESSI_OUTILS_SYSTEME=1` (Node et FFmpeg du Mac plutôt que ceux du disque), `PORT=8799`, `NO_OPEN=1` (ne pas ouvrir le navigateur), `MESSI_NO_AUTOSTOP=1` (ne jamais s'arrêter seul), `MESSI_DELAI=<secondes>`.
+Variables utiles : `WATCHIT_OUTILS_SYSTEME=1` (Node et FFmpeg du Mac plutôt que ceux du disque), `PORT=8799`, `NO_OPEN=1` (ne pas ouvrir le navigateur), `WATCHIT_NO_AUTOSTOP=1` (ne jamais s'arrêter seul), `WATCHIT_DELAI=<secondes>`.
 
 Les vidéos sont cherchées dans le dossier au-dessus de celui du site.
 
 ## Préparer un disque
 
-1. Mettre le dossier du site à la racine du disque, à côté des vidéos.
+1. Ranger les vidéos et le dossier du site dans un dossier `MOVIES` à la racine du disque : à la racine, il ne reste que `▶ WATCH` et `MOVIES`.
 2. Ajouter dans `outils/` les binaires pour Mac Apple Silicon et Intel : `node-arm64`, `node-x64` ([nodejs.org](https://nodejs.org)), `ffmpeg-arm64`, `ffmpeg-x64`, `ffprobe-arm64`, `ffprobe-x64` (versions statiques, par exemple [ffmpeg.martin-riedl.de](https://ffmpeg.martin-riedl.de)).
-3. Fabriquer le bouton : `outils/lanceur/construire.sh` (il faut Xcode ou les outils en ligne de commande). L'app « ▶ Messi por favor » apparaît à la racine du disque.
+3. Fabriquer le bouton : `outils/lanceur/construire.sh` (il faut Xcode ou les outils en ligne de commande). L'app « ▶ WATCH » apparaît à la racine du disque.
 
 Le disque doit être au format Mac (APFS ou HFS+) : l'app a besoin de l'autorisation « accéder à un volume amovible », que macOS ne demande que pour un vrai exécutable signé (d'où l'app en Swift plutôt qu'un script).
