@@ -31,7 +31,7 @@ const api = async (url, body) => {
 // ─── DONNÉES ──────────────────────────────────────────────────────────────────
 const S = {
   episodes: [], progress: {},
-  items: [], byKey: new Map(), newKeys: new Set(), // films et séries, dans un format commun
+  items: [], byKey: new Map(), // films et séries, dans un format commun
   collections: [],
 };
 
@@ -142,9 +142,6 @@ const fmtShort = (d) => {
 };
 const fmtLeft = (sec) => 'encore ' + fmtShort(Math.max(1, Math.round(sec / 60)));
 const seriesLine = (it) => `${it.seasonCount > 1 ? it.seasonCount + ' saisons, ' : ''}${it.epCount} épisode${it.epCount > 1 ? 's' : ''}`;
-// « Nouveau » : parmi les 12 derniers arrivés, et depuis moins de trois semaines
-// (après un gros import, le badge resterait sinon sur la moitié du catalogue)
-const isNew = (it) => !!it && S.newKeys.has(it.key);
 
 // Méta-données d'un titre : la note en jaune, puis année, durée…, puis les genres
 const metaHtml = (rating, parts, tags = []) =>
@@ -222,7 +219,7 @@ const clampSynopsis = () => {
 };
 
 // ─── CARTES ───────────────────────────────────────────────────────────────────
-// Affiche : badge (série, anime…), progression ; un point vert pour les nouveautés.
+// Affiche : badge (série, anime…), progression.
 // Souris arrêtée dessus : l'aperçu s'ouvre (voir APERÇU AU SURVOL).
 const card = (it, { num } = {}) => {
   const pct = itemProgress(it);
@@ -232,7 +229,7 @@ const card = (it, { num } = {}) => {
       ${pct ? `<span class="prog"><i style="width:${pct}%"></i></span>` : ''}
     </span>
     <b>${esc(it.title)}</b>
-    <small>${isNew(it) ? '<i class="nw" title="Nouveau sur le disque"></i>' : ''}${esc(it.year)}${it.rating ? `<span class="r">${icon('star')}${fmtRating(it.rating)}</span>` : ''}</small>
+    <small>${esc(it.year)}${it.rating ? `<span class="r">${icon('star')}${fmtRating(it.rating)}</span>` : ''}</small>
   </a>`;
 };
 
@@ -342,7 +339,8 @@ const initRails = () => $$('.rail-wrap', view).forEach(w => {
   const by = (dir) => r.scrollBy({ left: dir * step(), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   prev.addEventListener('click', () => by(-1));
   next.addEventListener('click', () => by(1));
-  r.addEventListener('scroll', () => { paint(); hidePreview(); }, { passive: true });
+  // la rangée défile : l'affiche bouge, l'aperçu s'efface simplement
+  r.addEventListener('scroll', () => { paint(); hidePreview(false, true); lightOff(true); }, { passive: true });
   new ResizeObserver(paint).observe(r);
 });
 
@@ -354,24 +352,279 @@ const playItem = (it) => {
   if (!eps.length) return toast('Les épisodes ne sont pas encore disponibles');
   openPlayer(it, currentEpisode(it.id) || eps[0]);
 };
-// ─── APERÇU AU SURVOL ─────────────────────────────────────────────────────────
-// Souris arrêtée sur une affiche : elle s'ouvre en grand (image du film, note, genres,
-// résumé, Lecture, Fiche). L'aperçu se ferme dès que la souris en sort.
-let pv = null, pvTimer = null;
+// ─── LUMIÈRE AU SURVOL ────────────────────────────────────────────────────────
+// Sur un fond presque noir, une ombre ne se voit pas : la profondeur vient de la lumière.
+// Deux rendus, au choix dans les Réglages (gardé dans le navigateur) :
+//   « film »       les couleurs de l'affiche (puis de la scène, autour de l'aperçu)
+//                  débordent autour d'elle, floutées, comme un écran qui éclaire la pièce ;
+//   « projecteur » une lumière douce et neutre tombe derrière la carte, et dedans une vraie
+//                  ombre en plusieurs couches devient visible.
+// Une seule lumière par affiche (.cp-light) : quand l'aperçu s'ouvre, elle s'étire avec la
+// carte, au même rythme, et passe des couleurs de l'affiche à celles de la scène ; quand il
+// se referme, elle se resserre sur l'affiche. Elle est rangée juste après la carte mais
+// placée par rapport au cadre de la rangée (la rangée, qui défile, ne la coupe pas), entre
+// les autres affiches (qu'elle éclaire) et l'affiche survolée. Elle se mélange « en écran »
+// (elle éclaire sans jamais assombrir) et son flou reste dans sa boîte (marge LIGHT_PAD) :
+// Safari coupe ce qui dépasse d'un calque animé.
+const LIGHTS = {
+  film: ['Film', 'Les couleurs de l’affiche débordent autour d’elle, floutées, comme un écran qui éclaire la pièce. Autour de l’aperçu, celles de la scène.'],
+  projecteur: ['Projecteur', 'Une lumière douce et neutre tombe derrière la carte ; dedans, son ombre se voit, avec un filet de lumière sur le bord du haut.'],
+};
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
 const canHover = matchMedia('(hover: hover) and (pointer: fine)');
-const hidePreview = () => {
-  clearTimeout(pvTimer);
+let lightMode = 'film';
+try { const m = localStorage.getItem('mpf-lumiere'); if (LIGHTS[m]) lightMode = m; } catch (e) { /* stockage indisponible : film */ }
+const paintLight = () => {
+  document.body.classList.toggle('light-film', lightMode === 'film');
+  document.body.classList.toggle('light-spot', lightMode === 'projecteur');
+};
+paintLight();
+
+// L'apparence : sombre (par défaut) ou claire. Le choix est posé dès le <head> d'index.html (pas d'éclair au chargement).
+const THEMES = {
+  sombre: ['Sombre', 'Un fond noir, comme une salle de cinéma : les images et les affiches ressortent.'],
+  clair: ['Clair', 'Un fond papier, doux et lumineux, pour regarder en plein jour. Le lecteur reste sombre.'],
+};
+let theme = document.documentElement.dataset.theme === 'light' ? 'clair' : 'sombre';
+const setTheme = (k) => {
+  if (k === theme || !THEMES[k]) return;
+  const apply = () => {
+    theme = k;
+    if (k === 'clair') document.documentElement.dataset.theme = 'light'; else delete document.documentElement.dataset.theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', k === 'clair' ? '#F4F3EF' : '#060607');
+    try { localStorage.setItem('mpf-theme', k); } catch (e) { /* stockage indisponible : le temps de la visite */ }
+  };
+  // un fondu entre les deux apparences, là où le navigateur sait le faire
+  if (document.startViewTransition && !calm.matches) document.startViewTransition(apply); else apply();
+};
+const setLightMode = (m) => {
+  if (!LIGHTS[m]) return;
+  lightMode = m;
+  try { localStorage.setItem('mpf-lumiere', m); } catch (e) { /* gardé seulement pour cette page */ }
+  hidePreview(false, true); lightOff(true); paintLight();
+};
+// Le cadre d'une affiche au repos (sans l'agrandissement du survol)
+const restRect = (c) => {
+  const im = $('.im', c), r = c.getBoundingClientRect();
+  return { left: r.left + im.offsetLeft, top: r.top + im.offsetTop, width: im.offsetWidth, height: im.offsetHeight };
+};
+const LIGHT_PAD = 220;          // marge de la boîte de lumière : le flou n'en sort jamais
+const LIGHT_EASE = 'cubic-bezier(.2,.8,.2,1)';
+let lit = null;                 // l'affiche éclairée : { c, el }
+// La boîte de lumière autour d'un cadre (coordonnées de l'écran), dans son bloc conteneur
+const lightBox = (el, r) => {
+  const op = el.offsetParent;
+  let bx = -scrollX, by = -scrollY;
+  if (op && op !== document.body && getComputedStyle(op).position !== 'static') {
+    const o = op.getBoundingClientRect(); bx = o.left + op.clientLeft - op.scrollLeft; by = o.top + op.clientTop - op.scrollTop;
+  }
+  return { left: `${r.left - bx - LIGHT_PAD}px`, top: `${r.top - by - LIGHT_PAD}px`, width: `${r.width + LIGHT_PAD * 2}px`, height: `${r.height + LIGHT_PAD * 2}px` };
+};
+// Étirer la lumière vers un autre cadre, au rythme de la carte
+const lightMove = (el, r, duration, easing) => {
+  // repartir de là où elle est vraiment, même au milieu d'un mouvement
+  const cs = getComputedStyle(el), from = { left: cs.left, top: cs.top, width: cs.width, height: cs.height }, to = lightBox(el, r);
+  el.getAnimations().filter(a => !('transitionProperty' in a)).forEach(a => a.cancel());
+  Object.assign(el.style, to);
+  if (!calm.matches) el.animate([from, to], { duration, easing });
+};
+const lightOff = (quick) => {
+  if (!lit) return;
+  const { c, el } = lit; lit = null;
+  c.classList.remove('lit');
+  // étirée sur un aperçu : elle se resserre sur son affiche en s'éteignant
+  if (el.classList.contains('big') && quick !== true && c.isConnected) { el.classList.remove('big'); lightMove(el, restRect(c), PV_CLOSE, 'cubic-bezier(.4,0,.2,1)'); }
+  el.classList.remove('on');
+  if (quick === true || calm.matches) el.remove(); else setTimeout(() => el.remove(), 700);
+};
+// Accents colorés (lumière « Film ») : une petite version de l'image qui garde ses couleurs franches, un peu
+// ravivées, et remplace ses tons ternes (blancs, beiges, gris) par sa couleur dominante. La lueur prend ainsi de
+// vraies couleurs. Une image sans couleur (noir et blanc) reste telle quelle. Réglage : Réglages › Lumière au survol.
+const accents = true;   // la lumière « Film » en accents colorés (le réglage Vives / Fidèles a été retiré)
+const accentMemo = new Map();
+const accentOf = (img) => {
+  const key = img.currentSrc || img.src;
+  if (accentMemo.has(key)) return accentMemo.get(key);
+  let out = null;
+  try {
+    const w = 24, h = Math.max(8, Math.round(w * img.naturalHeight / img.naturalWidth));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, w, h);
+    const id = g.getImageData(0, 0, w, h), p = id.data, vivid = new Uint8Array(w * h);
+    let ar = 0, ag = 0, ab = 0, aw = 0;
+    for (let i = 0, j = 0; i < p.length; i += 4, j++) {
+      const r = p[i], gg = p[i + 1], b = p[i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), ch = (mx - mn) / 255, l = (mx + mn) / 510;
+      if (ch > .2 && l > .1 && l < .9) { vivid[j] = 1; const wt = ch * ch; ar += r * wt; ag += gg * wt; ab += b * wt; aw += wt; }
+    }
+    if (aw > w * h * .004) {   // assez de couleur dans l'image pour s'en servir
+      let A = [ar / aw, ag / aw, ab / aw]; const ay = (A[0] + A[1] + A[2]) / 3;
+      A = A.map(v => Math.min(255, Math.max(0, ay + (v - ay) * 1.5)));
+      for (let i = 0, j = 0; i < p.length; i += 4, j++) {
+        if (vivid[j]) { const y = (p[i] + p[i + 1] + p[i + 2]) / 3; for (let k = 0; k < 3; k++) p[i + k] = Math.min(255, Math.max(0, y + (p[i + k] - y) * 1.35)); }
+        else for (let k = 0; k < 3; k++) p[i + k] = A[k] * .85 + p[i + k] * .15;
+      }
+      g.putImageData(id, 0, 0); out = `url("${c.toDataURL()}")`;
+    }
+  } catch (e) { /* image illisible : elle reste telle quelle */ }
+  accentMemo.set(key, out);
+  return out;
+};
+const accentFor = (img) => accents && lightMode === 'film' && img && img.complete && img.naturalWidth ? accentOf(img) : null;
+
+const lightOn = (c) => {
+  if (lit?.c === c || !c.isConnected) return;
+  lightOff();
+  const img = $('.im img', c), el = document.createElement('div');
+  el.className = 'cp-light'; el.setAttribute('aria-hidden', 'true');
+  el.style.setProperty('--lpad', LIGHT_PAD + 'px');
+  if (img) el.style.setProperty('--pimg', accentFor(img) || `url("${(img.currentSrc || img.src).replace(/"/g, '%22')}")`);
+  el.innerHTML = '<b><i class="lp1"></i><i class="lp2"></i><i class="ls1"></i><i class="ls2"></i></b>';
+  c.after(el);
+  Object.assign(el.style, lightBox(el, restRect(c)));
+  el.getBoundingClientRect(); // part éteinte : la transition l'allume
+  el.classList.add('on');
+  c.classList.add('lit');
+  lit = { c, el };
+};
+// L'aperçu s'ouvre : la lumière de l'affiche s'étire jusqu'à la carte et prend les couleurs de la scène
+const lightGrow = (c, r, src) => {
+  if (lit?.c !== c) lightOn(c);
+  if (!lit) return;
+  const el = lit.el;
+  if (src) {
+    el.style.setProperty('--simg', `url("${String(src).replace(/"/g, '%22')}")`);
+    // la scène aussi, en accents colorés, dès qu'elle est chargée
+    if (accents && lightMode === 'film') { const im = new Image(); im.onload = () => { const a = accentOf(im); if (a && el.isConnected) el.style.setProperty('--simg', a); }; im.src = src; }
+  }
+  el.classList.add('big');
+  lightMove(el, r, PV_OPEN, LIGHT_EASE);
+};
+// L'aperçu se referme : elle se resserre sur l'affiche, et s'éteint si la souris n'y est plus
+const lightShrink = (c, r, stay) => {
+  if (lit?.c !== c) return;
+  if (!stay) { lightOff(); return; }
+  const el = lit.el;
+  el.classList.remove('big');
+  lightMove(el, r, PV_CLOSE, 'cubic-bezier(.4,0,.2,1)');
+};
+let mouseX = -1, mouseY = -1;
+view.addEventListener('pointerover', (e) => {
+  if (e.pointerType !== 'mouse' || !canHover.matches) return;
+  const c = e.target.closest?.('.cp');
+  if (c && c !== lit?.c && c !== pv?.card) lightOn(c);
+});
+view.addEventListener('pointerout', (e) => {
+  const c = e.target.closest?.('.cp');
+  // la souris passe sur l'aperçu de cette affiche : sa lumière reste (elle s'étire avec lui)
+  if (c && c === lit?.c && c !== pv?.card && !c.contains(e.relatedTarget)) lightOff();
+});
+view.addEventListener('focusin', (e) => { const c = e.target.closest?.('.cp'); if (c && canHover.matches) lightOn(c); });
+view.addEventListener('focusout', (e) => { const c = e.target.closest?.('.cp'); if (c && c === lit?.c && c !== pv?.card && !c.contains(e.relatedTarget)) lightOff(); });
+
+// ─── APERÇU AU SURVOL ─────────────────────────────────────────────────────────
+// Souris arrêtée sur une affiche : la carte sort de l'affiche et s'agrandit (image du
+// film, note, résumé, Lecture, Fiche) ; quand la souris en sort, elle rétrécit et rentre
+// dans l'affiche. Entre l'affiche et la scène, une mise au point : l'une passe dans le
+// flou pendant que l'autre en sort ; le texte n'arrive qu'une fois l'affiche partie.
+// .pv-c est la carte, découpée par un clip-path animé. Son ombre est un élément à part (.pv-sh),
+// posé juste dessous : Safari ne redessine pas une ombre calculée sur une forme découpée pendant
+// qu'elle s'anime (elle n'apparaissait qu'à la fin). .pv-sh grandit exactement comme la carte
+// (même durée, même courbe) : l'ombre est là dès le premier instant, à la taille de l'affiche,
+// avant que la lumière ne s'étire. Simple fondu si « réduire les animations ».
+let pv = null, pvTimer = null;
+const PV_EASE = 'cubic-bezier(.2,.8,.2,1)';
+const PV_DELAY = 900; // ms de souris immobile sur une affiche avant l'aperçu
+const PV_OPEN = 460, PV_CLOSE = 400;
+// Le cadre de l'affiche vu depuis la carte, en clip-path (bords arrondis comme l'affiche)
+const pvInset = (l, t, pw, ph, w, h) =>
+  `inset(${Math.max(0, t).toFixed(1)}px ${Math.max(0, w - l - pw).toFixed(1)}px ${Math.max(0, h - t - ph).toFixed(1)}px ${Math.max(0, l).toFixed(1)}px round 14px)`;
+// L'affiche posée sur la carte, à sa place
+const pvPoster = (card, src, l, t, r) => {
+  const po = document.createElement('img');
+  po.className = 'pv-po'; po.alt = ''; if (src) po.src = src;
+  Object.assign(po.style, { left: l + 'px', top: t + 'px', width: r.width + 'px', height: r.height + 'px' });
+  card.append(po);
+  return po;
+};
+const pvOpen = (el, sh, { l, t, r, poster }) => {
+  const card = $('.pv-c', el), w = card.offsetWidth, h = card.offsetHeight;
+  const L = el.offsetLeft, T = el.offsetTop;
+  sh.animate([
+    { left: `${L + l}px`, top: `${T + t}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: '14px' },
+    { left: `${L}px`, top: `${T}px`, width: `${w}px`, height: `${h}px`, borderRadius: '18px' },
+  ], { duration: PV_OPEN, easing: PV_EASE });
+  const sc = $('.pv-im img', card), title = $('.pv-im b', card), bd = $('.pv-bd', card);
+  const po = pvPoster(card, poster, l, t, r);
+  card.animate([{ clipPath: pvInset(l, t, r.width, r.height, w, h) }, { clipPath: 'inset(0px 0px 0px 0px round 18px)' }], { duration: PV_OPEN, easing: PV_EASE });
+  // mise au point : l'affiche passe dans le flou…
+  po.animate([{ opacity: 1, filter: 'blur(0px)', transform: 'scale(1)' }, { opacity: 0, filter: 'blur(14px)', transform: 'scale(1.1)' }],
+    { duration: 300, delay: 40, easing: 'cubic-bezier(.4,0,1,1)', fill: 'both' }).finished.then(() => po.remove(), () => {});
+  // … pendant que la scène en sort
+  if (sc) sc.animate([
+    { opacity: .4, filter: 'blur(18px)', transform: 'scale(1.18)' }, // ses couleurs floues entourent déjà l'affiche
+    { opacity: 1, offset: .45 },
+    { opacity: 1, filter: 'blur(0px)', transform: 'scale(1)' },
+  ], { duration: 500, delay: 40, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' });
+  if (title) title.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 340, delay: 230, easing: PV_EASE, fill: 'backwards' });
+  if (bd) bd.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 360, delay: 260, easing: PV_EASE, fill: 'backwards' });
+};
+const pvClose = (el, sh, c, poster) => {
+  const card = $('.pv-c', el), sc = $('.pv-im img', card), title = $('.pv-im b', card), bd = $('.pv-bd', card);
+  const shs = getComputedStyle(sh), shNow = { left: shs.left, top: shs.top, width: shs.width, height: shs.height, borderRadius: shs.borderTopLeftRadius };
+  // repartir de là où en est l'ouverture si elle n'est pas finie
+  const now = (x, ...p) => { if (!x) return null; const s = getComputedStyle(x); return Object.fromEntries(p.map(k => [k, s[k] === 'none' && k !== 'opacity' ? (k === 'filter' ? 'blur(0px)' : 'none') : s[k]])); };
+  const clip = getComputedStyle(card).clipPath;
+  const scNow = now(sc, 'opacity', 'filter', 'transform'), tNow = now(title, 'opacity'), bNow = now(bd, 'opacity');
+  el.getAnimations({ subtree: true }).forEach(a => a.cancel());
+  sh.getAnimations().forEach(a => a.cancel());
+  $$('.pv-po', card).forEach(x => x.remove());
+  // la carte rentre dans l'affiche au repos (celle-ci reprend sa taille pendant ce temps)
+  const cr = card.getBoundingClientRect(), r = restRect(c), l = r.left - cr.left, t = r.top - cr.top;
+  const po = pvPoster(card, poster, l, t, r);
+  const anims = [
+    card.animate([{ clipPath: clip && clip !== 'none' ? clip : 'inset(0px 0px 0px 0px round 18px)' }, { clipPath: pvInset(l, t, r.width, r.height, cr.width, cr.height) }],
+      { duration: PV_CLOSE, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }),
+    po.animate([{ opacity: 0, filter: 'blur(14px)', transform: 'scale(1.1)' }, { opacity: 1, filter: 'blur(0px)', transform: 'scale(1)' }],
+      { duration: 300, delay: 90, easing: 'cubic-bezier(0,0,.2,1)', fill: 'both' }),
+    // l'ombre suit la carte jusqu'à l'affiche, puis toutes deux s'effacent sur l'affiche, identique
+    sh.animate([{ ...shNow, opacity: 1, offset: 0 }, { opacity: 1, offset: (PV_CLOSE - 90) / PV_CLOSE },
+      { left: `${r.left + scrollX}px`, top: `${r.top + scrollY}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: '14px', opacity: 0, offset: 1 }],
+      { duration: PV_CLOSE, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }),
+    el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, delay: PV_CLOSE - 90, fill: 'forwards' }),
+  ];
+  if (sc) anims.push(sc.animate([scNow, { opacity: 1, filter: 'blur(14px)', transform: 'scale(1.08)' }], { duration: 300, easing: 'ease-in', fill: 'forwards' }));
+  [[title, tNow], [bd, bNow]].forEach(([x, s]) => { if (x) anims.push(x.animate([s, { opacity: 0, transform: 'translateY(6px)' }], { duration: 150, easing: 'ease-out', fill: 'forwards' })); });
+  const done = () => { el.remove(); sh.remove(); };
+  Promise.all(anims.map(a => a.finished)).then(done, done);
+  return r;
+};
+// keep === true : on ferme sans annuler l'aperçu de l'affiche où arrive la souris ;
+// quick : simple fondu (on change de page, on lance la vidéo, la rangée défile)
+const hidePreview = (keep, quick) => {
+  if (keep !== true) clearTimeout(pvTimer);
   if (!pv) return;
-  const el = pv.el; pv = null;
-  el.classList.add('out');
-  setTimeout(() => el.remove(), 160);
+  const { el, sh, card, poster } = pv; pv = null;
+  el.classList.add('closing');
+  if (quick === true || calm.matches || !card.isConnected) {
+    el.classList.add('out'); sh.classList.add('out');
+    setTimeout(() => { el.remove(); sh.remove(); }, 170);
+    if (lit?.c === card) { if (quick === true) lightOff(true); else lightShrink(card, restRect(card), false); }
+    return;
+  }
+  const r = pvClose(el, sh, card, poster);
+  // la souris est-elle revenue sur l'affiche ? (l'aperçu qui se ferme ne capte plus la souris)
+  const under = mouseX >= 0 && document.elementFromPoint(mouseX, mouseY);
+  lightShrink(card, r, !!under && card.contains(under));
 };
 const showPreview = (c) => {
   const it = S.byKey.get(c.dataset.key);
   if (!it || !c.isConnected || wall) return;
   hidePreview();
-  const r = $('.im', c).getBoundingClientRect();
-  const w = Math.round(Math.max(320, Math.min(380, r.width * 2)));
+  const r = $('.im', c).getBoundingClientRect(), X = r.left + scrollX, Y = r.top + scrollY;
+  const href = `/${it.kind}/${esc(it.id)}`;
+  const meta = [it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it), it.director].filter(Boolean);
+  const star = it.rating ? `<span class="star">${icon('star')}${fmtRating(it.rating)}</span>` : '';
+  const W = Math.round(Math.max(400, Math.min(460, r.width * 2.4)));
   const el = document.createElement('div');
   el.className = 'pv';
   el.innerHTML = `<div class="pv-c"><a class="pv-im" href="${href}" data-link tabindex="-1">${it.backdrop || it.poster ? `<img src="${esc(it.backdrop || it.poster)}" alt="">` : ''}
@@ -386,29 +639,43 @@ const showPreview = (c) => {
   const img = $('img', c), t = c.style.getPropertyValue('--ct') || (img && img.complete && img.naturalWidth && tintOf(img));
   if (t) el.style.setProperty('--ct', t);
   document.body.append(el);
-  // sous la barre du haut, et sans dépasser le bas de l'écran
+  // centrée sur l'affiche, dans l'écran et sous la barre du haut
+  const vw = document.documentElement.clientWidth;
+  const L = Math.max(scrollX + 12, Math.min(scrollX + vw - W - 12, X + r.width / 2 - W / 2));
   const minTop = scrollY + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav')) + 6;
-  const maxTop = scrollY + innerHeight - el.offsetHeight - 12;
-  el.style.top = Math.max(minTop, Math.min(maxTop, r.top + scrollY - 16)) + 'px';
+  const T = Math.max(minTop, Math.min(scrollY + innerHeight - el.offsetHeight - 12, Y - 24));
+  el.style.left = L + 'px'; el.style.top = T + 'px';
+  // l'ombre de la carte, juste dessous
+  const sh = document.createElement('div');
+  sh.className = 'pv-sh'; sh.setAttribute('aria-hidden', 'true');
+  Object.assign(sh.style, { left: L + 'px', top: T + 'px', width: el.offsetWidth + 'px', height: el.offsetHeight + 'px' });
+  el.before(sh);
+  pv = { el, sh, card: c, poster: it.poster };
+  // la lumière de l'affiche s'étire avec la carte, au même rythme
+  lightGrow(c, { left: L - scrollX, top: T - scrollY, width: el.offsetWidth, height: el.offsetHeight }, it.backdrop || it.poster);
+  if (!calm.matches) pvOpen(el, sh, { l: X - L, t: Y - T, r, poster: it.poster });
   el.addEventListener('click', (e) => {
-    if (e.target.closest('[data-pv="play"]')) { hidePreview(); playItem(it); }
-    else if (e.target.closest('a[data-link]')) hidePreview();
+    if (e.target.closest('[data-pv="play"]')) { hidePreview(false, true); playItem(it); }
+    else if (e.target.closest('a[data-link]')) hidePreview(false, true);
   });
-  pv = { el, card: c };
 };
 view.addEventListener('pointerover', (e) => {
   if (e.pointerType !== 'mouse' || !canHover.matches) return;
   const c = e.target.closest('.cp[data-key]');
   if (!c || pv?.card === c) return;
   clearTimeout(pvTimer);
-  pvTimer = setTimeout(() => showPreview(c), 550);
+  pvTimer = setTimeout(() => showPreview(c), PV_DELAY);
 });
 view.addEventListener('pointerout', (e) => {
   const c = e.target.closest('.cp[data-key]');
   if (c && !c.contains(e.relatedTarget)) clearTimeout(pvTimer);
 });
-// la souris sort de l'aperçu (ou n'y est jamais entrée) : il se ferme
-document.addEventListener('pointermove', (e) => { if (pv && !pv.el.contains(e.target) && e.target !== pv.card && !pv.card.contains(e.target)) hidePreview(); }, { passive: true });
+// la souris sort de l'aperçu (ou n'y est jamais entrée) : il se ferme, sans annuler
+// celui de l'affiche où elle vient d'arriver
+document.addEventListener('pointermove', (e) => {
+  mouseX = e.clientX; mouseY = e.clientY;
+  if (pv && !pv.el.contains(e.target) && e.target !== pv.card && !pv.card.contains(e.target)) hidePreview(true);
+}, { passive: true });
 addEventListener('scroll', hidePreview, { passive: true });
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -416,6 +683,7 @@ const routes = [
   [/^\/$/,                 () => viewHome()],
   [/^\/catalogue\/?$/,     () => viewCatalogue()],
   [/^\/collections\/?$/,   () => viewCollections()],
+  [/^\/reglages\/?$/,      () => viewSettings()],
   [/^\/collection\/([\w-]+)$/, (id) => viewCollection(id)],
   [/^\/(film|serie)\/([\w-]+)$/, (kind, id) => viewTitle(kind, id)],
 ];
@@ -431,6 +699,8 @@ const setTab = () => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  const sb = $('#settings-btn');
+  if (sb) { if (path.startsWith('/reglages')) sb.setAttribute('aria-current', 'page'); else sb.removeAttribute('aria-current'); }
   // La pilule blanche glisse sous l'onglet ouvert
   const nav = $('.nav'), ind = $('.nav-ind'), on = $('.nav a.active');
   if (on) {
@@ -457,7 +727,8 @@ addEventListener('scroll', paintHeader, { passive: true });
 const render = () => {
   if (!$('#player').hidden) closePlayer();
   closeWall();
-  hidePreview();
+  hidePreview(false, true);
+  lightOff(true);
   stopHero();
   setNavTint(null);
   const path = location.pathname;
@@ -621,7 +892,7 @@ const viewHome = () => {
       <div class="glow" aria-hidden="true"></div>
       <div class="hero-copy" id="hero-copy"></div>
       ${picks.length > 1 ? `<div class="hero-next" role="group" aria-label="À l'affiche">${picks.map((p, k) =>
-        `<button class="th" type="button" aria-pressed="false" aria-label="${esc(p.it.title)}"><span class="im"><img src="${esc(p.it.backdrop)}" alt=""><i class="bar"></i></span><span class="nm">${esc(p.it.title)}</span></button>`).join('')}</div>` : ''}
+        `<button class="th" type="button" aria-pressed="false" aria-label="${esc(p.it.title)}" title="${esc(p.it.title)}"><span class="im"><img src="${esc(p.it.backdrop)}" alt=""><i class="bar"></i></span><span class="nm">${esc(p.it.title)}</span></button>`).join('')}</div>` : ''}
     </section>` : '<div class="hero-spacer"></div>'}
     <div class="rows">
       ${row('Reprendre', [], null, { html: resume.slice(0, 12).map(resumeCard).join('') })}
@@ -902,8 +1173,6 @@ const viewCatalogue = () => {
     if (k === 'q' || k === 'all') f.q = '';
   };
   $('#results').addEventListener('click', (e) => {
-    const p = e.target.closest('[data-play]');
-    if (p) { e.preventDefault(); e.stopPropagation(); return playItem(S.byKey.get(p.dataset.play)); }
     const c = e.target.closest('[data-clear]');
     if (c) { clearFilter(c.dataset.clear); update(); }
   });
@@ -929,6 +1198,15 @@ const viewCollections = () => {
     </div>
     ${n ? `<div class="col-grid">${S.collections.map(colCard).join('')}</div>` : `<div class="empty"><b>Aucune collection pour l'instant</b></div>`}
   </div>`;
+  // ▶ lance le film suivant de la collection ; le reflet de la carte prend la couleur de sa première scène
+  $$('.cs-go', view).forEach(b => b.addEventListener('click', () => {
+    const c = S.collections.find(x => x.id === b.dataset.col);
+    if (c) openPlayer(colNext(c).film, null);
+  }));
+  $$('.cs', view).forEach(el => {
+    const img = $('.sl img', el);
+    if (img) whenLoaded(img, () => { const t = img.isConnected && tintOf(img); if (t) el.style.setProperty('--tint', t); });
+  });
 };
 
 // Fiche : l'image du film en grand, le texte en bas à gauche
@@ -1734,7 +2012,7 @@ const openWall = () => {
       });
       if (moved.length) { void grid.offsetWidth; moved.forEach(a => { a.style.transition = ''; a.style.transform = ''; }); }
     }
-    count.textContent = !words.length ? `${items.length} titres sur le disque`
+    count.textContent = !words.length ? `${items.length} titres`
       : !hits.length ? 'Aucune affiche allumée'
       : `${hits.length} affiche${hits.length > 1 ? 's' : ''} allumée${hits.length > 1 ? 's' : ''}`;
     empty.hidden = !words.length || hits.length > 0;

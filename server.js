@@ -4,12 +4,12 @@
  * Le site vit dans ce dossier, sur le disque des films. Il tourne sur l'ordi de la
  * personne qui branche le disque (http://localhost), sans compte ni internet.
  *
- * Lancé par l'app « ▶ Messi por favor » (à la racine du disque), qui ouvre le navigateur
+ * Lancé par l'app « ▶ WATCH » (à la racine du disque, à côté du dossier MOVIES), qui ouvre le navigateur
  * quand le site est prêt et l'arrête quand on la quitte. Lancé à la main (node server.js,
  * ou le lanceur de secours), il ouvre lui-même le navigateur.
  * Si le site tourne déjà, il se contente de le rouvrir.
  *
- * Les vidéos sont lues depuis la racine du disque (le dossier parent de celui-ci).
+ * Les vidéos sont lues depuis le dossier parent de celui-ci (MOVIES, sur le disque).
  * Le site s'arrête tout seul quand plus aucune page n'est ouverte, pour qu'on puisse
  * éjecter le disque.
  */
@@ -24,7 +24,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const APP_ID   = 'messi-por-favor';
 const SITE     = __dirname;                 // ce dossier
-const DISK     = path.dirname(SITE);        // la racine du disque, où sont les vidéos
+const DISK     = path.dirname(SITE);        // le dossier des vidéos (MOVIES), parent de ce dossier
 const CATALOG  = path.join(SITE, 'catalogue.json');
 const STATE    = path.join(SITE, 'progression.json');
 const CACHE    = path.join(SITE, 'cache');  // sous-titres extraits (gardés d'une fois sur l'autre)

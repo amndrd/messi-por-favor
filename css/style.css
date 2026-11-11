@@ -286,13 +286,75 @@ input, select, textarea { font: inherit; color: inherit; }
 .cp small { display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 13px; margin-top: 1px; }
 .cp small .r { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cp small .r .ic { width: 12px; height: 12px; color: var(--gold); }
-/* point vert : nouveau sur le disque */
-.nw { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 9px; background: var(--green); box-shadow: 0 0 8px var(--green); margin-right: -2px; }
-.cp:hover .im, .cp:focus-visible .im {
+/* Survol : l'affiche monte un peu et grandit ; sa lumière et son ombre : LUMIÈRE AU SURVOL */
+.cp:hover .im {
+  transform: translateY(-4px) scale(1.07);
+  box-shadow: 0 1px 2px rgba(0,0,0,.6), 0 12px 26px -12px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.22);
+}
+.cp:focus-visible .im {
   transform: translateY(-6px) scale(1.035);
   box-shadow: 0 24px 50px -16px rgba(var(--ct, 0,0,0), .9), inset 0 0 0 1px rgba(255,255,255,.25);
 }
+.cp b { transition: color .3s; }
+.cp:hover b { color: #fff; }
 .cp:focus-visible .im { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* ══ LUMIÈRE AU SURVOL ════════════════════════════════════════════════════
+   Sur le fond presque noir, une ombre ne se voit pas : la profondeur vient de la
+   lumière. Deux rendus, choisis dans les Réglages (classe sur <body>) :
+   .light-film  les couleurs de l'affiche débordent autour d'elle, floutées ;
+   .light-spot  une lumière douce et neutre tombe derrière la carte, et dedans une
+                vraie ombre en plusieurs couches devient visible.
+   .cp-light = la lumière de l'affiche survolée, posée par app.js juste après la carte et
+   placée par rapport au cadre de la rangée (la rangée qui défile ne la coupe pas), entre
+   les autres affiches (qu'elle éclaire) et l'affiche survolée. Quand l'aperçu s'ouvre
+   (.big), la même lumière s'étire avec la carte et passe des couleurs de l'affiche (lp)
+   à celles de la scène (ls). Elle se mélange « en écran » (elle éclaire sans jamais
+   assombrir) et son flou reste dans sa boîte : --lpad = sa marge autour du cadre.        */
+.cp:hover, .cp.lit { z-index: 2; }
+.cp-light {
+  position: absolute; z-index: 1; pointer-events: none; mix-blend-mode: screen;
+  opacity: 0; transform: translateY(8px) scale(.94);
+  transition: opacity .6s cubic-bezier(.4,0,.2,1), transform .7s var(--ease);
+}
+.cp-light.on { opacity: 1; transform: translateY(-4px); }
+.cp-light.on.big { transform: none; }
+/* le cadre éclairé (l'affiche, puis la carte de l'aperçu) */
+.cp-light > b { position: absolute; inset: var(--lpad); }
+.cp-light i { position: absolute; inset: 0; border-radius: var(--r); will-change: opacity; } /* calques gardés : pas de saut de rendu à la fin des fondus */
+/* passage affiche → scène : l'une s'efface vite, l'autre arrive juste après (sans cumul trop vif) ; l'inverse à la fermeture */
+.cp-light :is(.lp1, .lp2) { transition: opacity .4s cubic-bezier(.4,0,.2,1) .06s; }
+.cp-light.big :is(.lp1, .lp2) { transition: opacity .28s cubic-bezier(.4,0,.2,1); }
+.cp-light :is(.ls1, .ls2) { transition: opacity .28s cubic-bezier(.4,0,.2,1); }
+.cp-light.big :is(.ls1, .ls2) { transition: opacity .5s cubic-bezier(.2,.8,.2,1) .08s; }
+/* le titre et l'année passent devant l'ombre de l'affiche (sinon elle les grise) */
+.cp > :is(b, small) { position: relative; z-index: 1; }
+
+/* Film : un halo serré qui garde les couleurs et une lueur large qui se diffuse ; autour de
+   l'aperçu, les mêmes avec la scène, un peu plus larges */
+.light-film .cp-light .lp1 { background: var(--pimg) center / cover; filter: blur(18px) saturate(1.7) brightness(1.1); opacity: .7; transform: translateY(6px) scale(1.03); }
+.light-film .cp-light .lp2 { background: var(--pimg) center / cover; filter: blur(40px) saturate(2) brightness(1.2); opacity: .5; transform: translateY(16px) scale(1.16); }
+.light-film .cp-light .ls1 { background: var(--simg) center / cover; filter: blur(30px) saturate(1.7) brightness(1.08); opacity: 0; transform: scale(.97); }
+.light-film .cp-light .ls2 { background: var(--simg) center / cover; filter: blur(54px) saturate(2) brightness(1.2); opacity: 0; transform: scale(1.08); }
+.light-film .cp-light.big .lp1, .light-film .cp-light.big .lp2 { opacity: 0; }
+.light-film .cp-light.big .ls1 { opacity: .62; }
+.light-film .cp-light.big .ls2 { opacity: .5; }
+.light-film .cp:hover .im, .light-film .cp:focus-visible .im {
+  box-shadow: 0 1px 2px rgba(0,0,0,.6), 0 12px 26px -12px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.22);
+}
+
+/* Projecteur : la lumière vient d'en haut (centre un peu au-dessus du milieu) et déborde
+   du cadre en proportion, de l'affiche à la carte ; l'ombre tombe dedans */
+.light-spot .cp-light .lp1 {
+  inset: -24% -30% -34%; border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 44%, rgba(255,248,240,.3), rgba(255,248,240,.18) 34%, rgba(255,248,240,.075) 62%, rgba(255,248,240,.022) 83%, transparent);
+}
+.light-spot .cp-light :is(.lp2, .ls1, .ls2) { display: none; }
+.light-spot .cp-light.big .lp1 { opacity: .88; }
+.light-spot .cp:hover .im, .light-spot .cp:focus-visible .im {
+  box-shadow: 0 1px 1px rgba(0,0,0,.7), 0 3px 6px rgba(0,0,0,.5), 0 10px 20px rgba(0,0,0,.48), 0 24px 44px -6px rgba(0,0,0,.6),
+              0 48px 80px -24px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.42), inset 0 0 0 1px rgba(255,255,255,.12);
+}
 
 /* Paysage : reprendre */
 .cl { width: 316px; }
@@ -426,7 +488,7 @@ input, select, textarea { font: inherit; color: inherit; }
   /* un nombre entier de vignettes tient dans la carte : aucune n'est coupée au bord */
   --n: 7; --gap: 12px; display: grid; grid-auto-flow: column; gap: var(--gap);
   grid-auto-columns: calc((100% - (var(--n) - 1) * var(--gap)) / var(--n));
-  padding: 10px 8px 6px; scroll-padding: 0 8px;
+  padding: 10px 22px 36px; scroll-padding: 0 22px;
 }
 @media (max-width: 1360px) { .cat-grail { --n: 6; } }
 @media (max-width: 1150px) { .cat-grail { --n: 5; } }
@@ -460,7 +522,7 @@ input, select, textarea { font: inherit; color: inherit; }
   overflow-x: auto; scrollbar-width: none;
 }
 .cat-bar::-webkit-scrollbar { display: none; }
-.cat-seg { display: inline-flex; gap: 2px; padding: 4px; border-radius: 99px; background: rgba(255,255,255,.05); border: 1px solid var(--line); flex: none; }
+.cat-seg { position: relative; isolation: isolate; display: inline-flex; gap: 2px; padding: 4px; border-radius: 99px; background: rgba(255,255,255,.05); border: 1px solid var(--line); flex: none; }
 .cat-seg button { height: 34px; padding: 0 11px; border-radius: 99px; display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: background .2s, color .2s; }
 .cat-seg button:hover { color: #fff; }
 .cat-seg button small { font-size: 12px; color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -1069,6 +1131,7 @@ input, select, textarea { font: inherit; color: inherit; }
 @media (hover: none), (pointer: coarse) {
   .rail-btn { display: none; }
   .cp:hover .im { transform: none; box-shadow: inset 0 0 0 1px var(--line); }
+  .cp-light { display: none; }
   .cl .pl { opacity: 1; transform: none; width: 34px; height: 34px; }
   .ep-play .ic { opacity: .95; transform: scale(.8); }
 }
