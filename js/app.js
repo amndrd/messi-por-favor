@@ -927,6 +927,20 @@ const readFilters = () => {
   return { q: q.get('q') || '', type: TYPES[q.get('type')] ? q.get('type') : '', genre: q.get('genre') || '',
     from: q.get('de') || '', to: q.get('a') || '', sort: SORTS[tri] ? tri : 'recent' };
 };
+// Barre du catalogue : une seule pastille blanche par groupe (type, tri, affichage), qui glisse
+// et s'élargit jusqu'au bouton choisi, comme celle du menu du haut
+const moveSegs = () => $$('.cat-seg', view).forEach(seg => {
+  let ind = $('.seg-ind', seg);
+  if (!ind) { ind = document.createElement('i'); ind.className = 'seg-ind'; ind.setAttribute('aria-hidden', 'true'); seg.prepend(ind); }
+  const on = $('button[aria-pressed="true"]', seg);
+  if (!on) { ind.style.opacity = 0; return; }
+  Object.assign(ind.style, { width: on.offsetWidth + 'px', height: on.offsetHeight + 'px', transform: `translate(${on.offsetLeft}px, ${on.offsetTop}px)`, opacity: 1 });
+  // la première fois elle se pose sans glisser
+  if (!seg.classList.contains('ready')) requestAnimationFrame(() => requestAnimationFrame(() => seg.classList.add('ready')));
+});
+addEventListener('resize', () => { if ($('.cat-seg', view)) moveSegs(); });
+document.fonts?.ready.then(() => { if ($('.cat-seg', view)) moveSegs(); });
+
 const writeFilters = (f) => {
   const q = new URLSearchParams();
   if (f.q) q.set('q', f.q); if (f.type) q.set('type', f.type); if (f.genre) q.set('genre', f.genre);
@@ -958,8 +972,6 @@ const filterItems = (f) => {
 
 const viewCatalogue = () => {
   const f = readFilters();
-  let mode = 'grid';
-  try { if (localStorage.getItem('mpf-affichage') === 'liste') mode = 'list'; } catch (e) {}
   const years = S.items.map(yearOf).filter(Boolean);
   const Y0 = Math.min(...years), Y1 = Math.max(...years), SPAN = Y1 - Y0 + 1;
   const decades = [];
@@ -1006,9 +1018,6 @@ const viewCatalogue = () => {
       <div class="cat-act" id="cat-act"></div>
       <span class="cat-n" id="cat-n" aria-live="polite"></span>
       <div class="cat-seg cat-sort" role="group" aria-label="Trier">${Object.entries(SORTS).map(([v, l]) => `<button type="button" data-sort="${v}">${l}</button>`).join('')}</div>
-      <div class="cat-seg cat-mode" role="group" aria-label="Affichage">
-        <button type="button" data-mode="grid" aria-label="Affiches" title="Affiches">${icon('grid')}</button>
-        <button type="button" data-mode="list" aria-label="Liste" title="Liste">${icon('list')}</button></div>
     </div></div>
     <section class="cat-res" id="results"></section>
   </div>`;
@@ -1063,7 +1072,7 @@ const viewCatalogue = () => {
     $('#cat-gsel').innerHTML = f.genre ? `<strong>${esc(f.genre)}</strong>, ${gn} titre${gn > 1 ? 's' : ''}` : `${$$('.cat-gt').length} genres`;
     $('#cat-gall').hidden = !f.genre;
     $$('[data-sort]', wrap).forEach(b => b.setAttribute('aria-pressed', b.dataset.sort === f.sort));
-    $$('[data-mode]', wrap).forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+    moveSegs();
     const pills = [
       (f.from || f.to) && `<button type="button" class="cat-pill" data-clear="years">${lo()} – ${hi()}${icon('x')}</button>`,
       f.genre && `<button type="button" class="cat-pill g" data-clear="genre" style="--g:${GENRE_TINT[f.genre] || '90,90,100'}">${esc(f.genre)}${icon('x')}</button>`,
@@ -1074,7 +1083,7 @@ const viewCatalogue = () => {
   };
 
   const paintResults = (list) => {
-    const block = (arr) => mode === 'list' ? `<div class="cat-list">${arr.map(listRow).join('')}</div>` : `<div class="grid">${arr.map(it => card(it)).join('')}</div>`;
+    const block = (arr) => `<div class="grid">${arr.map(it => card(it)).join('')}</div>`;
     if (!list.length) {
       $('#results').innerHTML = `<div class="empty"><b>Rien ne correspond</b>Élargis la période ou enlève un filtre.<br>
         <button class="btn glass" type="button" data-clear="all">${icon('reset')}Tout effacer</button></div>`;
@@ -1159,11 +1168,10 @@ const viewCatalogue = () => {
   // le genre choisi en arrivant (lien depuis l'accueil) est ramené dans la ligne
   if (f.genre) requestAnimationFrame(() => { const t = $('.cat-gt[aria-pressed="true"]'); if (t) t.parentElement.scrollLeft = t.offsetLeft - 40; });
   wrap.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-type], [data-sort], [data-mode], [data-clear]');
+    const t = e.target.closest('[data-type], [data-sort], [data-clear]');
     if (!t) return;
     if (t.dataset.type !== undefined) f.type = t.dataset.type;
     else if (t.dataset.sort) { reveal = t.dataset.sort === 'year' && f.sort !== 'year'; f.sort = t.dataset.sort; }
-    else if (t.dataset.mode) { mode = t.dataset.mode; try { localStorage.setItem('mpf-affichage', mode === 'list' ? 'liste' : 'affiches'); } catch (err) {} }
     else clearFilter(t.dataset.clear);
     update();
   });
@@ -1190,13 +1198,7 @@ const viewCollections = () => {
   view.innerHTML = `<div class="page">
     <header class="page-head"><div><h1 class="page-title">Collections</h1>
       <p class="page-sub">${n} collection${n > 1 ? 's' : ''}, ${films} films à voir dans l'ordre</p></div></header>
-    <div class="toolbar">
-      <nav class="seg" aria-label="Catalogue">
-        ${[['', 'Tout'], ...Object.entries(PLURAL)].map(([v, l]) => `<a href="/catalogue${v ? '?type=' + v : ''}" data-link>${esc(l)}<small>${v ? S.items.filter(it => it.type === v).length : S.items.length}</small></a>`).join('')}
-        <a href="/collections" data-link aria-current="page">Collections<small>${n}</small></a>
-      </nav>
-    </div>
-    ${n ? `<div class="col-grid">${S.collections.map(colCard).join('')}</div>` : `<div class="empty"><b>Aucune collection pour l'instant</b></div>`}
+    ${n ? `<div class="cs-grid">${colLayout(S.collections).map(x => colSlices(x.c, x.w)).join('')}</div>` : `<div class="empty"><b>Aucune collection pour l'instant</b></div>`}
   </div>`;
   // ▶ lance le film suivant de la collection ; le reflet de la carte prend la couleur de sa première scène
   $$('.cs-go', view).forEach(b => b.addEventListener('click', () => {
