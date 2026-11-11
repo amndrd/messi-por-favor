@@ -511,18 +511,49 @@ const heroCopy = ({ it }) => {
     ${it.description ? `<p class="syn">${esc(it.description)}</p>` : ''}
     <div class="cta">
       <button class="btn play" type="button" data-hero="play">${icon('play')}${itemProgress(it) ? 'Reprendre' : 'Lecture'}</button>
-      <a class="btn glass sq" href="/${it.kind}/${esc(it.id)}" data-link aria-label="Plus d'infos sur ${esc(it.title)}" title="Plus d'infos">${icon('info')}</a>
+      <a class="hero-more" href="/${it.kind}/${esc(it.id)}" data-link>Plus d'infos <span aria-hidden="true">→</span></a>
     </div>`;
+};
+
+// Le halo autour de l'écran : l'image du film réduite à quelques pixels (avec une large marge vide), adoucie,
+// un peu plus saturée, puis agrandie par la page. Équivaut à un flou de ~90 px, sans filtre CSS.
+const HALO_M = 260;   // la marge (en px de page) autour de l'image, que le halo remplit en s'estompant
+const paintHalo = (cv, img, hero) => {
+  const w = hero.clientWidth * .88, h = Math.max(100, hero.clientHeight - 200), W2 = w + 2 * HALO_M, H2 = h + 2 * HALO_M;
+  const tw = 64, th = Math.max(12, Math.round(tw * H2 / W2)); cv.width = tw; cv.height = th;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  const sc = Math.max(w / img.naturalWidth, h / img.naturalHeight), iw = img.naturalWidth * sc, ih = img.naturalHeight * sc;
+  g.save(); g.scale(tw / W2, th / H2); g.translate(HALO_M, HALO_M); g.beginPath(); g.rect(0, 0, w, h); g.clip();
+  g.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih); g.restore();
+  const id = g.getImageData(0, 0, tw, th), px = id.data;
+  for (let i = 0; i < px.length; i += 4) { const a = px[i + 3] / 255; px[i] *= a; px[i + 1] *= a; px[i + 2] *= a; }   // prémultiplié : pas de liseré sombre
+  const pass = (dx, dy) => {
+    const src = Float32Array.from(px), R = 3;
+    for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+      let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+      for (let k = -R; k <= R; k++) { const xx = x + k * dx, yy = y + k * dy; if (xx < 0 || yy < 0 || xx >= tw || yy >= th) continue;
+        const q = (yy * tw + xx) * 4; s0 += src[q]; s1 += src[q + 1]; s2 += src[q + 2]; s3 += src[q + 3]; }
+      const o = (y * tw + x) * 4, n = 2 * R + 1; px[o] = s0 / n; px[o + 1] = s1 / n; px[o + 2] = s2 / n; px[o + 3] = s3 / n;
+    }
+  };
+  pass(1, 0); pass(0, 1); pass(1, 0); pass(0, 1);
+  for (let i = 0; i < px.length; i += 4) {
+    const a = px[i + 3] / 255 || 1, r = px[i] / a, gg = px[i + 1] / a, b = px[i + 2] / a, y = .2126 * r + .7152 * gg + .0722 * b;
+    px[i] = Math.min(255, Math.max(0, y + (r - y) * 1.5)); px[i + 1] = Math.min(255, Math.max(0, y + (gg - y) * 1.5)); px[i + 2] = Math.min(255, Math.max(0, y + (b - y) * 1.5));
+  }
+  g.putImageData(id, 0, 0);
 };
 
 const initHero = (picks) => {
   const hero = $('#hero');
   if (!hero) return;
   const slides = $$('.slide', hero), copy = $('#hero-copy'), thumbs = $$('.th', hero);
+  $$('.hero-amb canvas', hero).forEach((c, j) => { const im = slides[j] && $('img', slides[j]); if (im) whenLoaded(im, () => { try { paintHalo(c, im, hero); } catch (e) { /* pas de halo */ } }); });
   let cur = -1, hold = false, startedAt = 0, left = HERO_MS;
   const show = (k) => {
     cur = k;
     slides.forEach((s, j) => s.classList.toggle('on', j === k));
+    $$('.hero-amb canvas', hero).forEach((c, j) => c.classList.toggle('on', j === k));   // le halo prend les couleurs du film
     thumbs.forEach((t, j) => { t.classList.toggle('on', j === k); t.setAttribute('aria-pressed', j === k); });
     copy.innerHTML = heroCopy(picks[k]);
     copy.classList.remove('swap'); void copy.offsetWidth; copy.classList.add('swap');
@@ -570,6 +601,8 @@ const viewHome = () => {
   const classics = S.items.filter(it => it.kind === 'film' && parseInt(it.year, 10) < 1980).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 18);
 
   view.innerHTML = `${picks.length ? `<section class="hero" id="hero" aria-label="À l'affiche">
+      <div class="hero-amb" aria-hidden="true">${picks.map((p, k) => `<canvas class="${k ? '' : 'on'}"></canvas>`).join('')}</div>
+      <div class="hero-sh" aria-hidden="true"></div>
       ${picks.map((p, k) => `<div class="slide${k ? '' : ' on'}"><img src="${esc(p.it.backdrop)}" alt=""${k ? '' : ' fetchpriority="high"'}></div>`).join('')}
       <div class="glow" aria-hidden="true"></div>
       <div class="hero-copy" id="hero-copy"></div>
@@ -577,14 +610,14 @@ const viewHome = () => {
         `<button class="th" type="button" aria-pressed="false" aria-label="${esc(p.it.title)}"><span class="im"><img src="${esc(p.it.backdrop)}" alt=""><i class="bar"></i></span><span class="nm">${esc(p.it.title)}</span></button>`).join('')}</div>` : ''}
     </section>` : '<div class="hero-spacer"></div>'}
     <div class="rows">
-      ${row('Reprendre', [], null, { sub: 'là où tu t\'es arrêté', html: resume.slice(0, 12).map(resumeCard).join('') })}
-      ${row('Nouveautés sur le disque', byRecent.slice(0, 18), '/catalogue')}
+      ${row('Reprendre', [], null, { html: resume.slice(0, 12).map(resumeCard).join('') })}
+      ${row('Nouveautés', byRecent.slice(0, 18), '/catalogue')}
       ${row('Les mieux notés', [], '/catalogue?tri=rating', { html: byRating.slice(0, 10).map(rankCard).join('') })}
       ${row('Collections', [], '/collections', { html: S.collections.map(colCard).join('') })}
       ${row('Séries', series.slice(0, 18), '/catalogue?type=serie')}
       ${row('Par genre', [], null, { html: genreTiles() })}
-      ${row('Les classiques', classics, '/catalogue?a=1979&tri=rating', { sub: 'avant 1980' })}
-      ${row('Animation et animes', anim, null)}
+      ${row('Les classiques', classics, '/catalogue?a=1979&tri=rating')}
+      ${row('Animation', anim, null)}
     </div>`;
 
   initHero(picks);

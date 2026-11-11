@@ -137,9 +137,18 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ══ GRANDE IMAGE (ACCUEIL) ═══════════════════════════════════════════════
    Les films défilent toutes les 8 s, en fondu, avec un léger zoom arrière. */
-.hero { position: relative; height: min(880px, 94vh); min-height: 600px; overflow: hidden; background: var(--bg); }
-.slide { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s ease; }
-.slide.on { opacity: 1; }
+/* Le hero est un écran de cinéma : l'image dans un cadre arrondi posé dans la page, avec un halo de ses propres couleurs */
+.hero { position: relative; height: max(600px, calc(100vh - 24px)); --scr: 92px var(--px) 112px; --scr-r: 28px; }
+/* le halo : l'image réduite à quelques pixels, adoucie à la main puis agrandie (js/app.js, paintHalo).
+   Pas de flou CSS : Safari coupe net le flou d'un élément pendant son fondu. */
+.hero-amb { position: absolute; left: 0; right: 0; top: -160px; bottom: -160px; z-index: 0; overflow: hidden; pointer-events: none; }
+.hero-amb canvas { position: absolute; top: 0; left: calc(6% - 260px); width: calc(88% + 520px); height: 100%; opacity: 0; transition: opacity 1.2s ease; }
+.hero-amb canvas.on { opacity: .6; }
+/* l'ombre de l'écran vit sur son propre calque, jamais animé : Safari coupe l'ombre d'un élément pendant son fondu */
+.hero-sh { position: absolute; inset: var(--scr); border-radius: var(--scr-r); box-shadow: 0 40px 90px -30px rgba(0,0,0,.9); pointer-events: none; }
+/* changement de film : la nouvelle image se pose par-dessus l'ancienne, qui reste pleine jusqu'au bout du fondu */
+.slide { position: absolute; inset: var(--scr); border-radius: var(--scr-r); overflow: hidden; opacity: 0; transition: opacity 0s linear 1.2s; }
+.slide.on { opacity: 1; z-index: 1; transition: opacity 1.2s ease; }
 .slide img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 22%;
   transform: scale(1.08); transition: transform 9s linear;
@@ -178,7 +187,7 @@ input, select, textarea { font: inherit; color: inherit; }
   position: absolute; left: -10%; bottom: -30%; width: 70%; height: 70%; z-index: 2; pointer-events: none;
   background: radial-gradient(closest-side, rgba(var(--tint),.3), transparent); transition: background 1.2s;
 }
-.hero-copy { position: absolute; z-index: 3; left: var(--px); bottom: 150px; width: min(560px, 46vw); }
+.hero-copy { position: absolute; z-index: 3; left: calc(var(--px) + 52px); bottom: 168px; width: min(560px, 44vw); }
 .hero-copy.swap > * { animation: rise .7s var(--ease) both; }
 .hero-copy.swap > :nth-child(2) { animation-delay: .05s; }
 .hero-copy.swap > :nth-child(3) { animation-delay: .1s; }
@@ -205,24 +214,21 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .cta, .actions { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
 /* les titres suivants */
-.hero-next { position: absolute; z-index: 3; right: var(--px); bottom: 150px; display: flex; gap: 12px; }
-.th { width: clamp(100px, 8.6vw, 136px); text-align: left; }
-.th .im {
-  position: relative; display: block; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
-  border: 1px solid rgba(255,255,255,.12); opacity: .6; transition: opacity .3s, border-color .3s;
-}
-.th img { width: 100%; height: 100%; object-fit: cover; }
-.th .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: #fff; width: 0; }
-.th:hover .im { opacity: .9; }
-.th.on .im { opacity: 1; border-color: rgba(255,255,255,.9); }
+/* sous l'écran, un point par film ; celui qu'on regarde s'allonge et se remplit */
+.hero-next { position: absolute; z-index: 3; left: 50%; bottom: 46px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+.th { position: relative; width: 8px; height: 28px; transition: width .45s var(--ease); }
+.th .im { position: absolute; left: 0; right: 0; top: 10px; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.28); transition: background .3s; }
+.th:hover .im { background: rgba(255,255,255,.5); }
+.th.on { width: 56px; }
+.th.on .im { background: rgba(255,255,255,.22); }
+.th img, .th .nm { display: none; }
+.th .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 99px; background: #fff; }
 .th.on .bar { animation: fill 8s linear forwards; }
 @keyframes fill { to { width: 100%; } }
-.th .nm { display: block; margin-top: 7px; font-size: 12.5px; font-weight: 500; color: #A1A1AA; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.th.on .nm { color: #fff; }
 .hero-spacer { height: calc(var(--nav) + 40px); }
 
 /* ══ RANGÉES ══════════════════════════════════════════════════════════════ */
-.rows { position: relative; z-index: 4; margin-top: -110px; padding-bottom: 30px; }
+.rows { position: relative; z-index: 4; margin-top: 4px; padding-bottom: 30px; }
 .row { margin-top: 44px; }
 .rh { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; padding: 0 var(--px); margin-bottom: 8px; }
 .rh h2 { font: 700 22px/1.2 var(--font); letter-spacing: -.01em; }
@@ -941,9 +947,6 @@ input, select, textarea { font: inherit; color: inherit; }
   .hd-search { width: 220px; }
 }
 @media (max-width: 1240px) {
-  .hero-next { gap: 8px; }
-  .th .nm { display: none; }
-  .th { width: 92px; }
 }
 @media (max-width: 1100px) {
   .hd-search { width: 42px; padding: 0; justify-content: center; background: none; }
@@ -954,14 +957,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 @media (max-width: 1080px) {
   :root { --px: 36px; }
-  .hero-copy { width: min(560px, calc(100% - 2 * var(--px))); bottom: 120px; }
-  .hero-next { left: var(--px); right: auto; bottom: 60px; gap: 6px; }
-  .th { width: 34px; }
-  .th .im { aspect-ratio: auto; height: 4px; border: 0; border-radius: 4px; background: rgba(255,255,255,.28); opacity: 1; }
-  .th .im img { display: none; }
-  .th .bar { height: 100%; }
-  .th.on .im { border: 0; }
-  .col-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .hero-copy { width: min(560px, calc(100% - 2 * var(--px) - 104px)); }
 }
 @media (max-width: 760px) {
   :root { --px: 18px; --nav: 62px; }
@@ -976,15 +972,16 @@ input, select, textarea { font: inherit; color: inherit; }
   .hd-act { height: 46px; padding: 3px; }
   .hd-search, .hd-ic { width: 38px; height: 38px; }
   .nav-div { margin: 0 1px; }
-  .hero { height: 84vh; min-height: 540px; }
+  .hero { height: 86vh; min-height: 560px; --scr: 70px 12px 64px; --scr-r: 22px; }
+  .hero::after { background: linear-gradient(90deg, rgba(6,6,7,.6) 0%, rgba(6,6,7,0) 80%), linear-gradient(0deg, rgba(6,6,7,.85) 0%, rgba(6,6,7,.5) 34%, rgba(6,6,7,0) 66%); }
   .slide img { object-position: 62% 20%; }
   .hero::after, .detail::after {
     background:
       linear-gradient(90deg, rgba(6,6,7,.7) 0%, rgba(6,6,7,0) 80%),
       linear-gradient(0deg, var(--bg) 0%, rgba(6,6,7,.75) 34%, rgba(6,6,7,0) 70%);
   }
-  .hero-copy { bottom: 96px; }
-  .hero-next { bottom: 64px; }
+  .hero-copy { left: 28px; right: 28px; width: auto; bottom: 88px; }
+  .hero-next { bottom: 22px; }
   .hero-title, .detail-title { font-size: 54px; }
   .hero-copy .hero-title { font-size: 56px; }
   .hero-copy .hero-title.l { font-size: 48px; }
@@ -1001,7 +998,7 @@ input, select, textarea { font: inherit; color: inherit; }
   .btn { height: 46px; padding: 0 18px; font-size: 15px; }
   .btn.sq { width: 46px; }
   .cta .btn.play, .actions .btn.play { flex: 1; }
-  .rows { margin-top: -50px; }
+  .rows { margin-top: 0; }
   .row { margin-top: 34px; }
   .rh h2 { font-size: 19px; }
   .rail { gap: 12px; }
