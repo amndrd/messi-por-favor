@@ -82,6 +82,21 @@ const loadCatalog = () => {
   return _cat;
 };
 
+// Réalisateurs et acteurs (fabriqué par outils/personnes.js). Le site reçoit la liste sans les
+// biographies ; une biographie se demande à part (/api/personne/<id>), à l'ouverture de la page.
+const PEOPLE = path.join(SITE, 'personnes.json');
+let _ppl = null, _pplLight = {}, _pplMtime = 0;
+const loadPeople = () => {
+  try {
+    const m = fs.statSync(PEOPLE).mtimeMs;
+    if (!_ppl || m !== _pplMtime) {
+      _ppl = JSON.parse(fs.readFileSync(PEOPLE, 'utf8')).gens || {}; _pplMtime = m;
+      _pplLight = Object.fromEntries(Object.entries(_ppl).map(([id, p]) => [id, { nom: p.nom, g: p.g || 0, ne: p.ne || null, mort: p.mort || null, photo: p.photo || null }]));
+    }
+  } catch (e) { if (!_ppl) _ppl = {}; }
+  return _ppl;
+};
+
 // Toutes les vidéos du disque (hors dossiers cachés et hors ce dossier)
 const SKIP_DIRS = new Set(['$RECYCLE.BIN', 'System Volume Information', 'Applications']);
 const scanDisk = () => {
@@ -424,7 +439,13 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/api/data') {
     const st = loadState();
-    return jsonRes(res, { ...buildLibrary(), progress: st.progress, myList: st.myList, tools: { ffmpeg: !!FFMPEG, ffprobe: !!FFPROBE } });
+    loadPeople();
+    return jsonRes(res, { ...buildLibrary(), people: _pplLight, progress: st.progress, myList: st.myList, tools: { ffmpeg: !!FFMPEG, ffprobe: !!FFPROBE } });
+  }
+  const pm = pathname.match(/^\/api\/personne\/(\d+)$/);
+  if (pm) {
+    const p = loadPeople()[pm[1]];
+    return p ? jsonRes(res, { bio: p.bio || '', lieu: p.lieu || '' }) : jsonRes(res, { error: 'Personne inconnue' }, 404);
   }
 
   // Progression d'un film ou d'un épisode (p = null : terminé)

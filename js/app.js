@@ -53,6 +53,7 @@ const toItem = (o, kind) => {
     description: o.description || '', poster: imgUrl(o.poster), backdrop: imgUrl(o.backdrop),
     logo: imgUrl(o.logo), logoTone: o.logoTone || '',
     addedAt: o.addedAt || 0, videoRef: o.videoRef || '', noSeason: !!o.noSeason,
+    equipe: o.equipe && Array.isArray(o.equipe.real) ? o.equipe : null,
   };
 };
 
@@ -73,8 +74,21 @@ const loadData = (d) => {
   }
   S.items = items;
   S.byKey = new Map(items.map(it => [it.key, it]));
-  S.newKeys = new Set(items.filter(it => it.addedAt > 0 && Date.now() - it.addedAt < 21 * 864e5)
-    .sort((a, b) => b.addedAt - a.addedAt).slice(0, 12).map(it => it.key));
+  // Réalisateurs et acteurs (outils/personnes.js) : chacun avec ses titres sur le disque
+  const P = d.people || {};
+  S.people = new Map();
+  const person = (id) => {
+    if (!S.people.has(id) && P[id]) S.people.set(id, { id, ...P[id], real: [], avec: [] });
+    return S.people.get(id);
+  };
+  for (const it of items) {
+    if (!it.equipe) continue;
+    for (const id of it.equipe.real) person(id)?.real.push(it);
+    for (const [id, role] of it.equipe.avec || []) person(id)?.avec.push([it, role]);
+    const names = (it.equipe.avec || []).map(([id]) => P[id]?.nom).filter(Boolean);
+    if (names.length) it.cast = names;           // la recherche trouve aussi les acteurs
+  }
+  for (const p of S.people.values()) p.titles = [...new Set([...p.real, ...p.avec.map(x => x[0])])].sort((a, b) => (yearOf(a) || 9999) - (yearOf(b) || 9999));
   // Collections : années, réalisateurs et durée totale déduits de leurs films
   S.collections = (d.collections || []).map(c => {
     const films = (c.filmIds || []).map(id => S.byKey.get('film:' + id)).filter(Boolean);
@@ -85,6 +99,7 @@ const loadData = (d) => {
       backdrop: imgUrl(c.backdrop) || films.find(f => f.backdrop)?.backdrop || null,
       years: !years.length ? '' : lo === hi ? String(lo) : `${lo} – ${hi}`,
       director: c.director || [...new Set(films.map(f => f.director).filter(Boolean))].join(', '),
+      dirIds: [...new Set(films.flatMap(f => f.equipe ? f.equipe.real : []))].filter(id => S.people.has(id)),
       minutes: films.reduce((n, f) => n + (parseInt(f.duration, 10) || 0), 0),
     };
   }).filter(c => c.films.length).sort((a, b) => a.title.localeCompare(b.title, 'fr'));
@@ -682,6 +697,8 @@ addEventListener('scroll', hidePreview, { passive: true });
 const routes = [
   [/^\/$/,                 () => viewHome()],
   [/^\/catalogue\/?$/,     () => viewCatalogue()],
+  [/^\/catalogue\/personnes\/?$/, () => viewPeople()],
+  [/^\/personne\/(\d+)$/,  (id) => viewPerson(id)],
   [/^\/collections\/?$/,   () => viewCollections()],
   [/^\/reglages\/?$/,      () => viewSettings()],
   [/^\/collection\/([\w-]+)$/, (id) => viewCollection(id)],
@@ -694,7 +711,7 @@ const setTab = () => {
   // « Catalogue » regroupe films et séries ; « Collections » a son propre onglet
   const tab = path === '/' ? 'accueil'
     : path.startsWith('/collection') ? 'collections'
-    : /^\/(catalogue|film\/|serie\/)/.test(path) ? 'catalogue' : '';
+    : /^\/(catalogue|film\/|serie\/|personne\/)/.test(path) ? 'catalogue' : '';
   $$('[data-tab]').forEach(a => {
     a.classList.toggle('active', a.dataset.tab === tab);
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -988,7 +1005,7 @@ const viewCatalogue = () => {
 
   view.innerHTML = `<div class="page cat">
     <header class="page-head"><div><h1 class="page-title" id="cat-title">Catalogue</h1>
-      <p class="page-sub">${S.items.length} titres, de ${Y0} à ${Y1}</p></div></header>
+      <p class="page-sub">${S.items.length} titres, de ${Y0} à ${Y1}</p></div>${catSwitch('titres')}</header>
     <section class="cat-board" aria-label="Filtres">
       <div class="cat-years" id="cat-years"><div class="cat-years-in">
       <div class="cat-fh"><h2>Les années</h2><span class="cat-per" id="cat-per" aria-live="polite"></span>
@@ -1192,6 +1209,249 @@ const viewCatalogue = () => {
 const directorLinks = (names) => names.split(/\s*,\s*/).filter(Boolean)
   .map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ');
 
+// ─── RÉALISATEURS ET ACTEURS ──────────────────────────────────────────────────
+// Données : outils/personnes.js (TMDB). S.people : id → { nom, g, ne, mort, photo, real, avec, titles }
+const personUrl = (p) => `/personne/${p.id}`;
+const initials = (n) => String(n).split(/\s+/).map(w => w[0] || '').slice(0, 2).join('');
+// le visage : les initiales dessous, la photo par-dessus quand elle arrive
+const personFace = (p, mini) => `<span class="pp-ini" aria-hidden="true">${esc(initials(p.nom))}</span>` +
+  (p.photo ? `<img src="/images/${mini ? 'min/' : ''}${esc(p.photo)}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="this.remove()">` : '');
+const personJob = (p) => {
+  const f = p.g === 1;
+  const real = !p.real.length ? '' : p.real.every(it => it.kind === 'serie') ? (f ? 'Créatrice' : 'Créateur') : (f ? 'Réalisatrice' : 'Réalisateur');
+  const act = p.avec.length ? (f ? 'Actrice' : 'Acteur') : '';
+  return real && act ? `${real} et ${act.toLowerCase()}` : real || act;
+};
+const titlesCount = (list) => {
+  const n = list.length, w = list.every(it => it.kind === 'film') ? 'film' : list.every(it => it.kind === 'serie') ? 'série' : 'titre';
+  return `${n} ${w}${n > 1 ? 's' : ''}`;
+};
+const lifeYears = (p) => p.ne ? p.ne.slice(0, 4) + (p.mort ? ' – ' + p.mort.slice(0, 4) : '') : '';
+const personLinks = (ids) => ids.map(id => S.people.get(id)).filter(Boolean)
+  .map(p => `<a href="${personUrl(p)}" data-link><b>${esc(p.nom)}</b></a>`).join(', ');
+
+// Catalogue : titres ou réalisateurs et acteurs
+const catSwitch = (on) => `<nav class="cat-switch" aria-label="Catalogue">
+    <a href="/catalogue" data-link${on === 'titres' ? ' aria-current="page"' : ''}>Films et séries</a>
+    <a href="/catalogue/personnes" data-link${on === 'personnes' ? ' aria-current="page"' : ''}>Réalisateurs et acteurs</a></nav>`;
+
+// Fiche d'un titre : la rangée « Distribution » (réalisation d'abord, puis les rôles)
+const castRow = (it) => {
+  if (!it.equipe) return '';
+  const seen = new Set(), ppl = [];
+  for (const id of it.equipe.real) if (S.people.has(id) && !seen.has(id)) { seen.add(id); ppl.push([S.people.get(id), it.kind === 'serie' ? 'Création' : 'Réalisation', true]); }
+  for (const [id, role] of it.equipe.avec || []) if (S.people.has(id) && !seen.has(id)) { seen.add(id); ppl.push([S.people.get(id), role, false]); }
+  if (!ppl.length) return '';
+  return `<section class="row cast">${rowHead('Distribution', `${ppl.length} personnes`)}${rail(ppl.map(([p, role, dir]) =>
+    `<a class="pp${dir ? ' dir' : ''}" href="${personUrl(p)}" data-link>
+      <span class="pp-ph">${personFace(p)}${p.titles.length > 1 ? `<span class="pp-n" title="${titlesCount(p.titles)} sur le disque">${p.titles.length}</span>` : ''}</span>
+      <b>${esc(p.nom)}</b><small>${esc(role)}</small></a>`).join(''))}</section>`;
+};
+
+// Page d'une personne : ses titres sur une frise, du plus ancien au plus récent
+const viewPerson = (id) => {
+  const p = S.people.get(+id);
+  if (!p) {
+    view.innerHTML = `<div class="page"><div class="empty"><b>Personne introuvable</b>Elle n'apparaît dans aucun titre du disque.<br>
+      <a class="btn glass" href="/catalogue/personnes" data-link>${icon('left')}Réalisateurs et acteurs</a></div></div>`;
+    return;
+  }
+  document.title = p.nom + ' · WATCHIT';
+  const roles = new Map(p.avec.map(([it, r]) => [it, r]));
+  const bgs = p.titles.filter(it => it.backdrop).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 4);
+  let prev = null;
+  const frise = p.titles.map(it => {
+    const y = yearOf(it), gap = prev && y && y - prev >= 8 ? `<span class="pz-gap">${y - prev} ans plus tard</span>` : '';
+    if (y) prev = y;
+    const role = p.real.includes(it) ? (it.kind === 'serie' ? 'Création' : 'Réalisation') : roles.get(it) || '';
+    return gap + `<a class="pz-f" href="/${it.kind}/${esc(it.id)}" data-link title="${esc(it.title)}${role ? ' — ' + esc(role) : ''}">
+      <span class="pz-po">${posterHtml(it.poster)}</span><b>${esc(it.year || '?')}</b></a>`;
+  }).join('');
+  const kicker = [personJob(p), lifeYears(p), titlesCount(p.titles) + ' sur le disque'].filter(Boolean).join(' · ');
+  const size = p.nom.length > 22 ? ' xl' : p.nom.length > 15 ? ' l' : '';
+  view.innerHTML = `<div class="page pz">
+    <div class="pz-bg" aria-hidden="true">${bgs.map(it => `<span>${thumbTag(it.backdrop)}</span>`).join('')}</div>
+    <header class="pz-h"><span class="pz-av">${personFace(p)}</span>
+      <div><p class="pz-k">${esc(kicker)}</p><h1 class="pz-n${size}">${esc(p.nom)}</h1></div></header>
+    <div class="pz-bio" id="pz-bio" data-id="${p.id}"></div>
+    <div class="pz-tl" role="list" aria-label="Titres sur le disque">${frise}</div>
+  </div>`;
+  // la biographie arrive à part ; à défaut, le lieu et la date de naissance
+  fetch('/api/personne/' + p.id).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(d => {
+    const box = $('#pz-bio');
+    if (!box || box.dataset.id !== String(p.id)) return;
+    const born = p.ne ? new Date(p.ne + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    const text = d.bio || (d.lieu || born ? `${p.g === 1 ? 'Née' : 'Né'}${d.lieu ? ' à ' + d.lieu : ''}${born ? ' le ' + born : ''}.` : '');
+    if (!text) return box.remove();
+    box.innerHTML = `<div class="pz-bt">${text.split(/\n+/).filter(Boolean).map(t => `<p>${esc(t)}</p>`).join('')}</div>
+      <button class="pz-more" type="button" hidden>Lire la suite</button>`;
+    const bt = $('.pz-bt', box), more = $('.pz-more', box);
+    more.hidden = bt.scrollWidth <= bt.clientWidth + 2 && bt.scrollHeight <= bt.clientHeight + 2;
+    more.addEventListener('click', () => { const open = box.classList.toggle('open'); more.textContent = open ? 'Réduire' : 'Lire la suite'; });
+  });
+};
+
+// Catalogue des réalisateurs et acteurs
+const viewPeople = () => {
+  document.title = 'Réalisateurs et acteurs · WATCHIT';
+  const qs = new URLSearchParams(location.search);
+  const st = { who: ['real', 'act'].includes(qs.get('qui')) ? qs.get('qui') : '', q: qs.get('q') || '', sort: qs.get('tri') === 'az' ? 'az' : 'n' };
+  const all = [...S.people.values()].filter(p => p.titles.length);
+  const isReal = (p) => p.real.length > 0, isAct = (p) => p.avec.length > 0;
+  const WHO = [['', 'Tous', all.length], ['real', 'Réalisateurs', all.filter(isReal).length], ['act', 'Acteurs', all.filter(isAct).length]];
+  view.innerHTML = `<div class="page pk">
+    <header class="page-head"><div><h1 class="page-title">Catalogue</h1>
+      <p class="page-sub">${all.length.toLocaleString('fr-FR')} personnes au générique</p></div>${catSwitch('personnes')}</header>
+    <div class="cat-wrap"><div class="cat-bar">
+      <div class="cat-seg" id="pk-who" role="group" aria-label="Qui">${WHO.map(([v, l, n]) => `<button type="button" data-who="${v}">${l}<small>${n.toLocaleString('fr-FR')}</small></button>`).join('')}</div>
+      <label class="pk-q">${icon('search')}<input id="pk-q" type="search" placeholder="Chercher un nom" autocomplete="off" spellcheck="false" value="${esc(st.q)}"></label>
+      <span class="cat-n" id="pk-n" aria-live="polite"></span>
+      <div class="cat-seg cat-sort" id="pk-sort" role="group" aria-label="Trier"><button type="button" data-sort="n">Les plus présents</button><button type="button" data-sort="az">A – Z</button></div>
+    </div></div>
+    <section class="pk-res" id="pk-res"></section></div>`;
+
+  const dirCard = (p) => {
+    const bg = p.real.find(it => it.backdrop) || p.titles.find(it => it.backdrop);
+    return `<a class="pk-d" href="${personUrl(p)}" data-link>${bg ? `<span class="pk-bg">${thumbTag(bg.backdrop)}</span>` : ''}
+      <span class="pk-av">${personFace(p, true)}</span>
+      <span class="pk-t"><b>${esc(p.nom)}</b><small>${[titlesCount(p.real), lifeYears(p)].filter(Boolean).join(' · ')}</small></span>
+      <span class="pk-ps">${p.real.slice(0, 3).map(it => `<span class="pk-po">${thumbTag(it.poster)}</span>`).join('')}</span></a>`;
+  };
+  const actCard = (p) => `<a class="pk-a" href="${personUrl(p)}" data-link><span class="pk-ph">${personFace(p)}</span>
+      <b>${esc(p.nom)}</b><small>${titlesCount(p.titles)}</small></a>`;
+  const PAGE = 96;
+  let shown = PAGE;
+
+  const paint = () => {
+    const k = norm(st.q);
+    const by = st.sort === 'az' ? (a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })
+      : (key) => (a, b) => b[key].length - a[key].length || b.titles.length - a.titles.length || a.nom.localeCompare(b.nom, 'fr');
+    const sortBy = (key) => st.sort === 'az' ? by : by(key);
+    const match = all.filter(p => !k || norm(p.nom).includes(k));
+    const dirs = match.filter(isReal).sort(sortBy('real')), acts = match.filter(isAct).sort(sortBy('avec'));
+    const head = (t, sub, more) => `<div class="pk-h"><h2>${t}</h2><span>${sub}</span>${more ? `<button type="button" class="pk-all" data-who="${more}">Tout voir</button>` : ''}</div>`;
+    let html = '';
+    if (!dirs.length && !acts.length) html = `<div class="empty"><b>Personne ne s'appelle ainsi</b>Essaie une autre orthographe.</div>`;
+    else if (!st.who) {
+      // un aperçu de chaque famille (tout, quand on cherche un nom)
+      const d = k ? dirs : dirs.slice(0, 8), a = k ? acts : acts.slice(0, 24);
+      if (d.length) html += `<section class="pk-sec">${head('Réalisateurs', `${dirs.length} personne${dirs.length > 1 ? 's' : ''}`, !k && dirs.length > d.length && 'real')}<div class="pk-dirs">${d.map(dirCard).join('')}</div></section>`;
+      if (a.length) html += `<section class="pk-sec">${head('Acteurs', `${acts.length.toLocaleString('fr-FR')} personne${acts.length > 1 ? 's' : ''}`, !k && acts.length > a.length && 'act')}<div class="pk-acts">${a.map(actCard).join('')}</div></section>`;
+    } else {
+      const list = st.who === 'real' ? dirs : acts;
+      html = `<section class="pk-sec">${st.who === 'real' ? `<div class="pk-dirs">${list.slice(0, shown).map(dirCard).join('')}</div>` : `<div class="pk-acts">${list.slice(0, shown).map(actCard).join('')}</div>`}
+        ${list.length > shown ? `<button type="button" class="btn glass pk-plus" id="pk-plus">Afficher plus (${(list.length - shown).toLocaleString('fr-FR')})</button>` : ''}</section>`;
+    }
+    $('#pk-res').innerHTML = html;
+    const n = st.who === 'real' ? dirs.length : st.who === 'act' ? acts.length : match.length;
+    $('#pk-n').textContent = `${n.toLocaleString('fr-FR')} personne${n > 1 ? 's' : ''}`;
+    $$('#pk-who [data-who]').forEach(b => b.setAttribute('aria-pressed', b.dataset.who === st.who));
+    $$('#pk-sort [data-sort]').forEach(b => b.setAttribute('aria-pressed', b.dataset.sort === st.sort));
+    moveSegs();
+    const q = new URLSearchParams();
+    if (st.who) q.set('qui', st.who); if (st.q) q.set('q', st.q); if (st.sort === 'az') q.set('tri', 'az');
+    history.replaceState(history.state, '', '/catalogue/personnes' + (q.toString() ? '?' + q : ''));
+  };
+  view.addEventListener('click', function pick(e) {
+    if (!$('#pk-res')) return view.removeEventListener('click', pick);
+    const t = e.target.closest('[data-who], [data-sort], #pk-plus');
+    if (!t) return;
+    if (t.id === 'pk-plus') { shown += PAGE * 2; return paint(); }
+    if (t.dataset.who !== undefined) { st.who = t.dataset.who; shown = PAGE; if (t.classList.contains('pk-all')) scrollTo(0, 0); }
+    else st.sort = t.dataset.sort;
+    paint();
+  });
+  let timer;
+  $('#pk-q').addEventListener('input', (e) => { clearTimeout(timer); timer = setTimeout(() => { st.q = e.target.value.trim(); shown = PAGE; paint(); }, 120); });
+  paint();
+};
+
+// ─── RÉGLAGES ─────────────────────────────────────────────────────────────────
+// Gardés dans le navigateur (localStorage). Pour l'instant : la lumière au survol.
+const viewSettings = () => {
+  document.title = 'Réglages · WATCHIT';
+  const withPoster = S.items.filter(it => it.poster);
+  // une affiche colorée pour montrer chaque lumière
+  const best = [...withPoster].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const sample = ['Animation', 'Fantastique', 'Aventure', 'Comédie', 'Romance'].map(g => best.find(it => it.genres.includes(g))).find(Boolean) || best[0];
+  const demo = (k) => sample ? `<span class="set-demo set-demo-${k}" aria-hidden="true" style="--pimg:${bgUrl(sample.poster)}"><i></i><img src="${esc(sample.poster)}" alt=""></span>` : '';
+  // une miniature de chaque écran de veille
+  const vxSample = withPoster.filter(it => it.backdrop && it.logo).slice(0, 1)[0] || sample;
+  const vxDemo = (k) => k === 'plein'
+    ? `<span class="set-demo set-vx set-vx-plein" aria-hidden="true" style="--pimg:${vxSample && vxSample.backdrop ? bgUrl(vxSample.backdrop) : 'none'}"><i></i><span class="set-vx-clk">21:04</span>${vxSample && vxSample.logo ? `<img src="${esc(vxSample.logo)}" alt="">` : ''}</span>`
+    : `<span class="set-demo set-vx set-vx-mur" aria-hidden="true"><span class="set-vx-wall">${withPoster.slice(0, 40).map(it => `<img src="${esc(thumbUrl(it.poster))}" alt="">`).join('')}</span><span class="set-vx-clk">21:04</span></span>`;
+  // une miniature du site dans chaque apparence
+  const themeDemo = (k) => `<span class="set-demo set-theme set-theme-${k}" aria-hidden="true">
+      <span class="st-nav"><span></span><span></span><span></span></span>
+      <span class="st-scr"${sample && sample.backdrop ? ` style="--pimg:${bgUrl(sample.backdrop)}"` : ''}></span>
+      <span class="st-row"><span></span><span></span><span></span><span></span></span></span>`;
+  view.innerHTML = `<div class="page set">
+    <header class="page-head"><div><h1 class="page-title">Réglages</h1>
+      <p class="page-sub">Gardés dans ce navigateur, sur cet ordinateur.</p></div></header>
+    <section class="set-sec" aria-labelledby="set-theme">
+      <div class="set-h"><h2 id="set-theme">Apparence</h2>
+        <p>Le site en sombre ou en clair.</p></div>
+      <div class="set-opts" role="radiogroup" aria-labelledby="set-theme">
+        ${Object.entries(THEMES).map(([k, [label, text]]) => `<button class="set-opt" type="button" role="radio" aria-checked="${k === theme}" tabindex="${k === theme ? 0 : -1}" data-theme-k="${k}">
+          ${themeDemo(k)}<span class="set-tx"><b>${esc(label)}</b><small>${esc(text)}</small></span><span class="set-ck" aria-hidden="true">${icon('check')}</span></button>`).join('')}
+      </div>
+    </section>
+    <section class="set-sec${veille.on ? '' : ' off'}" id="set-vx" aria-labelledby="set-veille">
+      <div class="set-h"><h2 id="set-veille">Écran de veille</h2>
+        <p>Quand le site reste ouvert sans un geste, des films défilent en grand. La souris ou une touche, et tout revient.</p></div>
+      <div class="set-row"><span class="set-lb" id="set-vx-on">Activé</span>
+        <div class="set-pills" role="radiogroup" aria-labelledby="set-vx-on">
+          ${[[1, 'Oui'], [0, 'Non']].map(([v, l]) => `<button type="button" role="radio" aria-checked="${!!v === veille.on}" tabindex="${!!v === veille.on ? 0 : -1}" data-vx-on="${v}">${l}</button>`).join('')}</div></div>
+      <div class="set-row"><span class="set-lb" id="set-vx-min">Après</span>
+        <div class="set-pills" role="radiogroup" aria-labelledby="set-vx-min">
+          ${VEILLE_MIN.map(m => `<button type="button" role="radio" aria-checked="${m === veille.min}" tabindex="${m === veille.min ? 0 : -1}" data-vx-min="${m}">${m} min</button>`).join('')}</div></div>
+      <div class="set-opts" role="radiogroup" aria-label="Style de l’écran de veille">
+        ${Object.entries(VEILLE_STYLES).map(([k, [label, text]]) => `<button class="set-opt" type="button" role="radio" aria-checked="${k === veille.style}" tabindex="${k === veille.style ? 0 : -1}" data-vx-style="${k}">
+          ${vxDemo(k)}<span class="set-tx"><b>${esc(label)}</b><small>${esc(text)}</small></span><span class="set-ck" aria-hidden="true">${icon('check')}</span></button>`).join('')}
+      </div>
+      <button class="btn glass set-try" type="button" data-vx-try>Voir l’écran de veille</button>
+    </section>
+    <section class="set-sec" aria-labelledby="set-light">
+      <div class="set-h"><h2 id="set-light">Lumière au survol</h2>
+        <p>Ce qui éclaire une affiche quand la souris passe dessus, puis l’aperçu qui s’ouvre.</p></div>
+      <div class="set-opts" role="radiogroup" aria-labelledby="set-light">
+        ${Object.entries(LIGHTS).map(([k, [label, text]]) => `<button class="set-opt" type="button" role="radio" aria-checked="${k === lightMode}" tabindex="${k === lightMode ? 0 : -1}" data-light="${k}">
+          ${demo(k)}<span class="set-tx"><b>${esc(label)}</b><small>${esc(text)}</small></span><span class="set-ck" aria-hidden="true">${icon('check')}</span></button>`).join('')}
+      </div>
+      ${canHover.matches ? '' : '<p class="set-note">Sur un écran tactile il n’y a pas de survol : ce réglage ne change rien ici.</p>'}
+    </section>
+  </div>`;
+  // chaque groupe se comporte comme des boutons radio (clic, flèches du clavier)
+  const group = (sel, onPick) => {
+    const opts = $$(sel, view);
+    const pick = (b) => {
+      onPick(b);
+      opts.forEach(x => { x.setAttribute('aria-checked', String(x === b)); x.tabIndex = x === b ? 0 : -1; });
+    };
+    opts.forEach((b, i) => {
+      b.addEventListener('click', () => pick(b));
+      b.addEventListener('keydown', (e) => {
+        const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+        if (!d) return;
+        e.preventDefault();
+        const n = opts[(i + d + opts.length) % opts.length];
+        pick(n); n.focus();
+      });
+    });
+  };
+  group('[data-theme-k]', b => setTheme(b.dataset.themeK));
+  group('[data-light]', b => setLightMode(b.dataset.light));
+  // la démonstration « Film » montre les couleurs choisies
+  const accDemo = () => { const d = $('.set-demo-film', view), im = d && $('img', d); if (!im) return;
+    const go = () => d.style.setProperty('--pimg', (accents && im.naturalWidth && accentOf(im)) || bgUrl(im.src));
+    if (im.complete) go(); else im.addEventListener('load', go, { once: true }); };
+  accDemo();
+  group('[data-vx-on]', b => { veille.on = b.dataset.vxOn === '1'; saveVeille(); $('#set-vx')?.classList.toggle('off', !veille.on); });
+  group('[data-vx-min]', b => { veille.min = +b.dataset.vxMin; saveVeille(); });
+  group('[data-vx-style]', b => { veille.style = b.dataset.vxStyle; saveVeille(); });
+  $('[data-vx-try]', view)?.addEventListener('click', () => startVeille(true));
+};
+
 const viewCollections = () => {
   document.title = 'Collections · Messi por favor';
   const n = S.collections.length, films = S.collections.reduce((k, c) => k + c.films.length, 0);
@@ -1247,7 +1507,7 @@ const viewCollection = (id) => {
     crumb: `<a class="crumb" href="/collections" data-link>${icon('left')}Collections</a>`,
     title: c.title,
     meta: metaHtml(null, [`${c.films.length} films`, c.years, c.minutes ? fmtShort(c.minutes) + ' en tout' : '']),
-    extra: c.director ? `<p class="by">Réalisé par ${directorLinks(c.director)}</p>` : '',
+    extra: c.dirIds.length ? `<p class="by">Réalisé par ${personLinks(c.dirIds)}</p>` : c.director ? `<p class="by">Réalisé par ${directorLinks(c.director)}</p>` : '',
     synopsis: c.description,
     actions: `<button class="btn play" id="play-btn" type="button">${icon('play')}${started ? 'Reprendre' : 'Lecture'}</button>`,
     after: `<p class="note">Film ${nextIdx + 1} sur ${c.films.length} : ${esc(next.title)}</p>`,
@@ -1298,14 +1558,17 @@ const viewTitle = (kind, id) => {
     crumb: `<a class="crumb" href="/catalogue?type=${it.type}" data-link>${icon('left')}${esc(PLURAL[it.type])}</a>`,
     title: it.title, logo: it.logo, logoTone: it.logoTone,
     meta: metaHtml(it.rating, [it.year, kind === 'film' ? fmtShort(it.duration) : seriesLine(it)], it.genres),
-    extra: (it.director ? `<p class="by">Réalisé par ${directorLinks(it.director)}</p>` : '') +
-      (cast.length ? `<p class="by">Avec ${cast.map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ')}</p>` : ''),
+    extra: (it.equipe && it.equipe.real.some(id => S.people.has(id))
+        ? `<p class="by">${kind === 'serie' ? 'Créé par' : 'Réalisé par'} ${personLinks(it.equipe.real)}</p>`
+        : it.director ? `<p class="by">Réalisé par ${directorLinks(it.director)}</p>` : '') +
+      (!castRow(it) && cast.length ? `<p class="by">Avec ${cast.map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ')}</p>` : ''),
     synopsis: it.description,
     actions: `<button class="btn play" id="play-btn" type="button">${icon('play')}${esc(playLabel)}</button>`,
     after: (resume ? `<div class="resume"><span class="pb"><i style="width:${resume.pct}%"></i></span><span>${esc(resume.text)}</span></div>` : '') +
       inCols.map(c => `<a class="in-col" href="/collection/${esc(c.id)}" data-link>${icon('grid')}Fait partie de la collection <b>${esc(c.title)}</b></a>`).join('<br>'),
   }) + `<div class="fiche-body">
       ${kind === 'serie' ? `<section class="eps" id="episodes-zone"></section>` : ''}
+      ${castRow(it)}
       ${row(it.genres.length ? 'Dans le même genre' : 'À voir aussi', more, null)}
     </div>`;
 
