@@ -51,6 +51,7 @@ const toItem = (o, kind) => {
     genres: (o.genres || []).filter(g => g && g !== 'Autre'),
     director: o.director || '', cast: Array.isArray(o.cast) ? o.cast : [], duration: o.duration || '', rating: parseFloat(o.rating) || null,
     description: o.description || '', poster: imgUrl(o.poster), backdrop: imgUrl(o.backdrop),
+    logo: imgUrl(o.logo), logoTone: o.logoTone || '',
     addedAt: o.addedAt || 0, videoRef: o.videoRef || '', noSeason: !!o.noSeason,
   };
 };
@@ -129,7 +130,7 @@ const thumbUrl = (u) => u && u.startsWith('/images/') && !u.startsWith('/images/
 const thumbTag = (src) => imgTag(thumbUrl(src), src);
 const posterHtml = (src) => placeholder() + thumbTag(src);
 const bgUrl = (src) => `url(&quot;${esc(String(src).replace(/"/g, '%22'))}&quot;)`;
-const logoFace = () => $('.header .logo-face')?.outerHTML || '';
+const logoMark = () => $('.header .logo-mark')?.outerHTML || '';
 
 // Note sur 10 à la française (8,6) ; durée courte (2 h 03) ; ce qu'il reste à voir
 const fmtRating = (r) => r ? r.toFixed(1).replace('.', ',') : '';
@@ -500,9 +501,13 @@ let heroTimer = null;
 const stopHero = () => { clearTimeout(heroTimer); heroTimer = null; };
 const HERO_MS = 8000;
 
+// comme le générique d'un film : « Un film de… », le titre (ou son logo), une ligne d'infos en petites capitales
 const heroCopy = ({ it }) => {
-  return `<h1 class="hero-title${titleSize(it.title)}">${esc(it.title)}</h1>
-    <div class="meta">${metaHtml(it.rating, [it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it), it.director], it.genres.slice(0, 2))}</div>
+  const by = it.director ? `${it.kind === 'serie' ? 'Une série de' : 'Un film de'} ${it.director}` : '';
+  const bits = [it.year, it.kind === 'film' ? fmtShort(it.duration) : seriesLine(it), it.genres.slice(0, 2).join(' · ')].filter(Boolean);
+  return `${by ? `<p class="hero-kick">${esc(by)}</p>` : ''}
+    ${titleHtml('hero-title', it.title, it.logo, it.logoTone)}
+    <div class="hero-line">${bits.map(b => `<span>${esc(b)}</span>`).join('<i aria-hidden="true"></i>')}${it.rating ? `<i aria-hidden="true"></i><span class="r">★ ${fmtRating(it.rating)}</span>` : ''}</div>
     ${it.description ? `<p class="syn">${esc(it.description)}</p>` : ''}
     <div class="cta">
       <button class="btn play" type="button" data-hero="play">${icon('play')}${itemProgress(it) ? 'Reprendre' : 'Lecture'}</button>
@@ -880,12 +885,12 @@ const viewCollections = () => {
 };
 
 // Fiche : l'image du film en grand, le texte en bas à gauche
-const detailHero = ({ bg, crumb, title, meta, extra = '', synopsis, actions, after = '' }) => `<section class="detail">
+const detailHero = ({ bg, crumb, title, logo, logoTone, meta, extra = '', synopsis, actions, after = '' }) => `<section class="detail">
     ${bg ? `<div class="detail-bg"><img src="${esc(bg)}" alt="" fetchpriority="high"></div>` : ''}
     <div class="glow" aria-hidden="true"></div>
     <div class="detail-in">
       ${crumb}
-      <h1 class="detail-title${titleSize(title)}">${esc(title)}</h1>
+      ${titleHtml('detail-title', title, logo, logoTone)}
       ${meta ? `<div class="meta">${meta}</div>` : ''}
       ${extra}
       ${synopsis ? `<p class="synopsis">${esc(synopsis)}</p>` : ''}
@@ -964,7 +969,7 @@ const viewTitle = (kind, id) => {
   view.innerHTML = detailHero({
     bg,
     crumb: `<a class="crumb" href="/catalogue?type=${it.type}" data-link>${icon('left')}${esc(PLURAL[it.type])}</a>`,
-    title: it.title,
+    title: it.title, logo: it.logo, logoTone: it.logoTone,
     meta: metaHtml(it.rating, [it.year, kind === 'film' ? fmtShort(it.duration) : seriesLine(it)], it.genres),
     extra: (it.director ? `<p class="by">Réalisé par ${directorLinks(it.director)}</p>` : '') +
       (cast.length ? `<p class="by">Avec ${cast.map(n => `<a href="/catalogue?q=${encodeURIComponent(n)}" data-link><b>${esc(n)}</b></a>`).join(', ')}</p>` : ''),
