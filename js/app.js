@@ -1779,6 +1779,131 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ─── ÉCRAN DE VEILLE ──────────────────────────────────────────────────────────
+// Après quelques minutes sans un geste, des films défilent en grand ; la souris ou une touche, et tout revient.
+// Deux styles : le plein écran (une scène qui avance lentement, son logo, l'heure) ou le mur d'affiches qui dérive.
+// Rien pendant une vidéo ni pendant le ticket d'entrée. Réglages : marche/arrêt, délai, style (localStorage mpf-veille).
+const VEILLE_STYLES = {
+  plein: ['Plein écran', 'Une scène en grand qui avance lentement, puis le film suivant, avec son logo et l’heure.'],
+  mur: ['Mur d’affiches', 'Tout le catalogue en mur d’affiches qui dérive ; de temps en temps, une affiche s’allume.'],
+};
+const VEILLE_MIN = [1, 2, 5, 10, 15];
+const veille = { on: true, min: 5, style: 'plein' };
+try { Object.assign(veille, JSON.parse(localStorage.getItem('mpf-veille') || '{}')); } catch (e) { /* réglages par défaut */ }
+if (!VEILLE_STYLES[veille.style]) veille.style = 'plein';
+const saveVeille = () => { try { localStorage.setItem('mpf-veille', JSON.stringify(veille)); } catch (e) { /* le temps de la visite */ } };
+let veilleEl = null, lastAct = Date.now();
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const vxClock = (el) => {
+  const d = new Date(), b = $('.vx-clk b', el), s = $('.vx-clk small', el);
+  if (b) b.textContent = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (s) s.textContent = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+};
+const vxLoad = (src) => new Promise(res => { const i = new Image(); i.onload = i.onerror = () => res(i); i.src = src; });
+// la couleur moyenne d'une image (pour le halo de l'affiche allumée)
+const vxTint = (img) => { try { const c = document.createElement('canvas'); c.width = c.height = 8; const g = c.getContext('2d'); g.drawImage(img, 0, 0, 8, 8);
+  const d = g.getImageData(0, 0, 8, 8).data; let r = 0, gg = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; }
+  return `${r / 64 | 0},${gg / 64 | 0},${b / 64 | 0}`; } catch (e) { return '255,255,255'; } };
+
+const veillePlein = (el) => {
+  const list = shuffle(S.items.filter(it => it.backdrop)); let k = -1, cur = 0;
+  el.innerHTML = `<div class="vx-sl"><img alt=""></div><div class="vx-sl"><img alt=""></div><div class="vx-shade"></div>
+    <div class="vx-clk"><b></b><small></small></div>
+    <div class="vx-info"><div class="vx-t"></div><div class="vx-k"></div><i class="vx-bar"><i></i></i></div>
+    <span class="vx-mark">${logoMark()}</span>`;
+  const sl = $$('.vx-sl', el), info = $('.vx-info', el);
+  const next = async () => {
+    k = (k + 1) % list.length; const it = list[k], img = await vxLoad(it.backdrop);
+    if (!el.isConnected) return;
+    cur = 1 - cur; const a = sl[cur], b = sl[1 - cur], im = $('img', a);
+    im.src = img.src;
+    // un lent travelling, dans une direction différente à chaque film
+    const dx = (Math.random() * 2 - 1) * 2.4, dy = (Math.random() * 2 - 1) * 1.6;
+    a.style.setProperty('--x1', dx + '%'); a.style.setProperty('--y1', dy + '%'); a.style.setProperty('--x2', -dx + '%'); a.style.setProperty('--y2', -dy + '%');
+    a.classList.remove('on'); void a.offsetWidth; a.classList.add('on'); b.classList.remove('on');
+    info.classList.add('out');
+    setTimeout(() => {
+      if (!el.isConnected) return;
+      $('.vx-t', el).innerHTML = it.logo ? `<img class="title-logo" src="${esc(it.logo)}" alt="${esc(it.title)}" onload="mpfTone(this)">` : `<b>${esc(it.title)}</b>`;
+      $('.vx-k', el).textContent = [it.year, it.director || (it.kind === 'serie' ? 'Série' : '')].filter(Boolean).join(' · ');
+      const bar = $('.vx-bar', el); bar.classList.remove('go'); void bar.offsetWidth; bar.classList.add('go');
+      info.classList.remove('out');
+    }, 650);
+  };
+  next(); el._t = setInterval(next, 12000);
+};
+
+const veilleMur = (el) => {
+  const ps = shuffle(S.items.filter(it => it.poster)); let cells = ps;
+  while (cells.length < 132) cells = cells.concat(shuffle(ps));
+  cells = cells.slice(0, 132);
+  const grid = `<div class="vx-grid">${cells.map(it => `<span data-k="${esc(it.key)}"><img src="${esc(thumbUrl(it.poster))}" alt="" decoding="async"></span>`).join('')}</div>`;
+  el.innerHTML = `<div class="vx-wall"><div class="vx-track">${grid}${grid}</div></div><div class="vx-shade"></div>
+    <div class="vx-clk vx-low"><b></b><small></small><span class="vx-now"></span></div><span class="vx-mark">${logoMark()}</span>`;
+  // de temps en temps, l'affiche la plus proche du centre s'allume
+  const light = () => {
+    if (!el.isConnected) return;
+    $('.vx-grid .lit', el)?.classList.remove('lit');
+    let best = null, bd = 1e12; const cx = innerWidth * .62, cy = innerHeight * .44;
+    for (const s of $$('.vx-grid span', el)) { const r = s.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = s; } }
+    if (!best) return;
+    const it = S.byKey.get(best.dataset.k), im = $('img', best);
+    best.style.setProperty('--glow', im && im.complete && im.naturalWidth ? vxTint(im) : '255,255,255');
+    best.classList.add('lit');
+    $('.vx-now', el).textContent = it ? [it.title, it.year].filter(Boolean).join(' · ') : '';
+  };
+  setTimeout(light, 1200); el._t = setInterval(light, 6500);
+};
+
+const busyForVeille = () => !$('#player').hidden || !!document.querySelector('.tk-ov') || document.hidden;
+const startVeille = (force) => {
+  if (veilleEl || (!force && busyForVeille()) || !S.items.length) return;
+  const el = document.createElement('div');
+  el.className = `vx vx-${veille.style}`; el.setAttribute('aria-hidden', 'true');
+  (veille.style === 'mur' ? veilleMur : veillePlein)(el);
+  vxClock(el); el._c = setInterval(() => vxClock(el), 10000);
+  document.body.append(el); veilleEl = el;
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
+  setTimeout(() => { el.dataset.ready = '1'; }, 900);   // un tout petit mouvement juste après l'apparition ne la ferme pas
+};
+const stopVeille = () => {
+  const el = veilleEl; if (!el) return;
+  veilleEl = null; lastAct = Date.now();
+  clearInterval(el._t); clearInterval(el._c); el.classList.remove('on');
+  setTimeout(() => el.remove(), 700);
+};
+['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach(ev => addEventListener(ev, (e) => {
+  if (veilleEl) {
+    if (!veilleEl.dataset.ready) return;
+    if (ev === 'keydown' || ev === 'pointerdown' || ev === 'wheel') { e.preventDefault(); e.stopPropagation(); }   // le geste réveille seulement
+    stopVeille(); return;
+  }
+  lastAct = Date.now();
+}, { capture: true, passive: false }));
+setInterval(() => { if (veille.on && !veilleEl && Date.now() - lastAct > veille.min * 60000) startVeille(); }, 5000);
+
+// ─── L'ENTRÉE SUR LE SITE ─────────────────────────────────────────────────────
+// Quand la pile de cartes du chargement s'efface (js/arrivee.js) : la barre descend du haut (le logo apparaît
+// sur place), l'écran du film monte en grandissant un peu, son texte arrive ligne à ligne, les points sous
+// l'écran apparaissent un à un, puis les rangées. Une seule fois, à l'arrivée.
+let entered = false;
+const entrance = () => {
+  if (entered) return; entered = true;
+  if (calm.matches || !document.body.animate) return;
+  const E = (el, kf, delay, dur = 800, easing = 'cubic-bezier(.2,.8,.2,1)') => el?.animate(kf, { duration: dur, delay: delay * 1000, easing, fill: 'backwards' });
+  const DROP = [{ opacity: 0, translate: '0 -96px' }, { opacity: 1, translate: '0 0' }], BOUNCE = 'cubic-bezier(.22,1.12,.36,1)';
+  E($('#header .logo'), [{ opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0)' }], .15, 800);
+  E($('#header .nav'), DROP, .12, 950, BOUNCE);
+  E($('#header .hd-act'), DROP, .2, 950, BOUNCE);
+  const hero = $('#hero');
+  if (!hero) { E(view, [{ opacity: 0, translate: '0 24px' }, { opacity: 1, translate: '0 0' }], .3); return; }
+  E(hero, [{ opacity: 0, translate: '0 40px', scale: '.96' }, { opacity: 1, translate: '0 0', scale: '1' }], .25, 1100);
+  $$('#hero-copy > *').forEach((el, i) => E(el, [{ opacity: 0, translate: '0 18px' }, { opacity: 1, translate: '0 0' }], .62 + i * .07, 700));
+  $$('#hero .th').forEach((el, i) => E(el, [{ opacity: 0, scale: '.3' }, { opacity: 1, scale: '1' }], .95 + i * .06, 600, 'cubic-bezier(.34,1.4,.64,1)'));
+  E($('#view > .rows'), [{ opacity: 0, translate: '0 30px' }, { opacity: 1, translate: '0 0' }], 1.05, 900);
+};
+addEventListener('mpf-arrivee-out', entrance, { once: true });
+
 // ─── DÉMARRAGE ────────────────────────────────────────────────────────────────
 const init = async () => {
   const data = await api('/api/data');
