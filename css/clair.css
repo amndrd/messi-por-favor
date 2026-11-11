@@ -1,0 +1,449 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Thème clair (Réglages › Apparence). Le site passe en clair quand <html> porte
+   data-theme="light" (posé dès le <head> d'index.html, sans éclair).
+   Cette première partie est écrite à la main ; la suite est fabriquée par
+   outils/theme-clair.js à partir de style.css (à relancer après un changement).
+   ══════════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F4F3EF; --s1: #FFFFFF; --s2: #ECEBE6; --s3: #E1E0DA;
+  --line: rgba(20,20,23,.08); --line2: rgba(20,20,23,.14);
+  --text: #141417; --body: #2C2C32; --muted: #5E5E68; --dim: #8C8C95;
+}
+/* le lecteur vidéo reste sombre */
+:root[data-theme="light"] .player {
+  color-scheme: dark; color: #F5F5F7;
+  --bg: #060607; --s1: #111114; --s2: #1A1A1F; --s3: #24242B;
+  --line: rgba(255,255,255,.08); --line2: rgba(255,255,255,.14);
+  --text: #F5F5F7; --body: #D4D4D8; --muted: #A3A3AD; --dim: #71717A;
+}
+/* l'arrivée suit le thème : en clair, la pile de cartes du logo passe en noir */
+:root[data-theme="light"] .arrivee path { fill: #141417; }
+/* la lumière au survol : sur fond clair, elle colore au lieu d'éclairer */
+:root[data-theme="light"] .cp-light { mix-blend-mode: multiply; }
+
+/* la barre de navigation reste sombre (verre fumé, texte clair) ; le logo passe en noir */
+:root[data-theme="light"] .header {
+  --text: #F5F5F7; --body: #D4D4D8; --muted: #A3A3AD; --dim: #71717A;
+  --line: rgba(255,255,255,.08); --line2: rgba(255,255,255,.14);
+}
+:root[data-theme="light"] .header .glass {
+  background: rgba(22,22,26,.8); border-color: rgba(255,255,255,.1);
+  box-shadow: 0 14px 34px -16px rgba(52,40,30,.6), inset 0 1px 0 rgba(255,255,255,.07);
+}
+:root[data-theme="light"] .header.solid .glass { background: rgba(26,26,31,.9); }
+:root[data-theme="light"] .header::before { background: linear-gradient(to bottom, rgba(244,243,239,.92), rgba(244,243,239,.6) 50%, rgba(244,243,239,0)); }
+:root[data-theme="light"] .logo { color: #141417; }
+:root[data-theme="light"] .logo-mark path { fill: #141417; }
+:root[data-theme="light"] .logo .logo-mark { filter: drop-shadow(0 2px 8px rgba(52,40,30,.16)); }
+
+/* les logos de films : un logo clair passe en noir sur le voile clair (et un logo sombre reste sombre) */
+:root[data-theme="light"] .title-logo { filter: drop-shadow(0 4px 18px rgba(52,40,30,.14)); }
+:root[data-theme="light"] .title-logo[data-tone="light"] { filter: brightness(0) drop-shadow(0 4px 18px rgba(52,40,30,.14)); }
+:root[data-theme="light"] .title-logo[data-tone="dark"] { filter: drop-shadow(0 4px 18px rgba(52,40,30,.14)); }
+
+/* l'écran de veille reste sombre : ses logos et le logo du site gardent le réglage du thème sombre */
+:root[data-theme="light"] .vx .title-logo { filter: drop-shadow(0 4px 24px rgba(0,0,0,.45)); }
+:root[data-theme="light"] .vx .title-logo[data-tone="dark"] { filter: brightness(0) invert(1) drop-shadow(0 4px 24px rgba(0,0,0,.45)); }
+:root[data-theme="light"] .vx-mark .logo-mark path { fill: #fff; }
+
+/* ── Ce qui reste sombre dans le thème clair ──────────────────────────────
+   Ce qui est une image garde son voile sombre et son texte blanc : l'écran de l'accueil,
+   les vignettes (Reprendre, épisodes), les tranches des collections, les cartes des
+   réalisateurs. Les barres de boutons sont en verre fumé, comme la barre de navigation.
+   Le reste de la page est papier. Les règles sautées par le générateur sont dans
+   outils/theme-clair.js (SKIP_SELECTOR). */
+:root[data-theme="light"] :is(.hero-copy, .cat-board, .cat-bar, .cat-switch, .cs, .pk-d, .set-pills, .seasons, .cl .im, .ep-thumb, .cp .badge, .cp .num, .prog) {
+  color-scheme: dark;
+  --bg: #060607; --s1: #111114; --s2: #1A1A1F; --s3: #24242B;
+  --line: rgba(255,255,255,.08); --line2: rgba(255,255,255,.14);
+  --text: #F5F5F7; --body: #D4D4D8; --muted: #A3A3AD; --dim: #71717A;
+  color: var(--text);
+}
+/* les barres de boutons */
+:root[data-theme="light"] :is(.cat-board, .cat-switch, .set-pills, .seasons) {
+  background: rgba(22,22,26,.9); border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 18px 40px -22px rgba(52,40,30,.55), 0 2px 6px -2px rgba(52,40,30,.18), inset 0 1px 0 rgba(255,255,255,.06);
+}
+:root[data-theme="light"] .cat-bar {
+  background: rgba(22,22,26,.84); border-color: rgba(255,255,255,.1);
+  box-shadow: 0 16px 36px -18px rgba(52,40,30,.6), 0 2px 6px -2px rgba(52,40,30,.18), inset 0 1px 0 rgba(255,255,255,.07);
+}
+:root[data-theme="light"] .cat-switch, :root[data-theme="light"] .set-pills { padding: 4px; }
+:root[data-theme="light"] .seasons { display: inline-flex; gap: 4px; padding: 4px; border-radius: 99px; }
+:root[data-theme="light"] .seasons button:not([aria-selected="true"]) { border-color: transparent; background: transparent; }
+
+:root[data-theme="light"] .cat-board .rail-btn { color: #fff; }
+:root[data-theme="light"] .cat-board .rail-btn .ic { background: rgba(26,26,31,.85); border-color: rgba(255,255,255,.14); }
+:root[data-theme="light"] .cat-board .rail-btn:hover .ic { background: #fff; color: #000; }
+
+/* l'écran de l'accueil : une salle de cinéma sur le mur clair */
+:root[data-theme="light"] .hero-sh { box-shadow: 0 46px 90px -40px rgba(52,40,30,.6), 0 10px 26px -14px rgba(52,40,30,.3); }
+:root[data-theme="light"] .hero-copy .btn.play { background: #fff; color: #000; }
+:root[data-theme="light"] .hero-copy .btn.play:hover { background: #E4E4E7; }
+:root[data-theme="light"] .hero-copy .title-logo,
+:root[data-theme="light"] .hero-copy .title-logo[data-tone="light"] { filter: drop-shadow(0 4px 24px rgba(0,0,0,.45)); }
+:root[data-theme="light"] .hero-copy .title-logo[data-tone="dark"] { filter: brightness(0) invert(1) drop-shadow(0 4px 24px rgba(0,0,0,.45)); }
+
+/* la fiche : le papier à gauche pour le texte, la scène nette et vive à droite */
+:root[data-theme="light"] .detail::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(244,243,239,.97) 0%, rgba(244,243,239,.9) 26%, rgba(244,243,239,.45) 46%, rgba(244,243,239,0) 64%),
+    linear-gradient(0deg, #F4F3EF 0%, rgba(244,243,239,.55) 14%, rgba(244,243,239,0) 34%);
+}
+
+/* les affiches et les vignettes : posées sur le papier, avec une ombre chaude et douce */
+:root[data-theme="light"] .cp .im { box-shadow: 0 0 0 1px rgba(20,20,23,.06), 0 1px 2px rgba(52,40,30,.1), 0 14px 26px -16px rgba(52,40,30,.5); }
+:root[data-theme="light"] :is(.cl .im, .ep-thumb) { box-shadow: 0 0 0 1px rgba(20,20,23,.06), 0 14px 28px -16px rgba(52,40,30,.5); }
+:root[data-theme="light"] .cs-in { box-shadow: 0 30px 60px -32px rgba(52,40,30,.6), 0 6px 16px -8px rgba(52,40,30,.25); }
+:root[data-theme="light"] .pk-d { box-shadow: 0 18px 34px -20px rgba(52,40,30,.55); }
+:root[data-theme="light"] .pk-d:hover { box-shadow: 0 24px 44px -20px rgba(52,40,30,.65); }
+
+@media (max-width: 760px) {
+  :root[data-theme="light"] .hero::after { background: linear-gradient(90deg, rgba(6,6,7,.7) 0%, rgba(6,6,7,0) 80%), linear-gradient(0deg, rgba(6,6,7,.9) 0%, rgba(6,6,7,.75) 34%, rgba(6,6,7,0) 70%); }
+  :root[data-theme="light"] .detail::after {
+    background: linear-gradient(0deg, #F4F3EF 0%, rgba(244,243,239,.92) 36%, rgba(244,243,239,.4) 58%, rgba(244,243,239,0) 76%);
+  }
+}
+
+/* Page d'une personne : la mosaïque de scènes, plus discrète sur fond clair */
+:root[data-theme="light"] .pz-bg { opacity: .16; }
+
+/* ═══ À partir d'ici : généré par outils/theme-clair.js, ne pas modifier à la main ═══ */
+:root[data-theme="light"] :focus-visible {
+  outline: 2px solid #141417;
+}
+:root[data-theme="light"] ::selection {
+  background: rgba(20,20,23,0.85);
+  color: #f6f5f1;
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #c0bfbd;
+}
+:root[data-theme="light"] .btn.play,
+:root[data-theme="light"] .btn-red {
+  background: #141417;
+  color: #f6f5f1;
+}
+:root[data-theme="light"] .btn.play:hover,
+:root[data-theme="light"] .btn-red:hover {
+  background: #2b2b2d;
+}
+:root[data-theme="light"] .btn.glass,
+:root[data-theme="light"] .btn-ghost,
+:root[data-theme="light"] .btn-line {
+  background: rgba(20,20,23,0.13);
+  color: #141417;
+  border: 1px solid rgba(20,20,23,0.14);
+}
+:root[data-theme="light"] .btn.glass:hover,
+:root[data-theme="light"] .btn-ghost:hover,
+:root[data-theme="light"] .btn-line:hover {
+  background: rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .link-u {
+  color: #141417;
+  text-decoration-color: rgba(20,20,23,0.35);
+}
+:root[data-theme="light"] .link-u:hover {
+  text-decoration-color: #141417;
+}
+:root[data-theme="light"] .meta .rate {
+  color: #e7e6e2;
+}
+:root[data-theme="light"] .meta .tag {
+  border: 1px solid rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .th .im {
+  background: rgba(20,20,23,0.28);
+}
+:root[data-theme="light"] .th:hover .im {
+  background: rgba(20,20,23,0.5);
+}
+:root[data-theme="light"] .th.on .im {
+  background: rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .th .bar {
+  background: #141417;
+}
+:root[data-theme="light"] .rh > a:hover {
+  color: #141417;
+}
+:root[data-theme="light"] .rail-btn {
+  color: #141417;
+}
+:root[data-theme="light"] .rail-btn .ic {
+  background: rgba(221,221,217,0.85);
+}
+:root[data-theme="light"] .rail-btn:hover .ic {
+  background: #141417;
+  color: #f6f5f1;
+}
+:root[data-theme="light"] .rail-btn.prev {
+  background: linear-gradient(90deg, rgba(240,239,236,0.85), rgba(240,239,236,0));
+}
+:root[data-theme="light"] .rail-btn.next {
+  background: linear-gradient(270deg, rgba(240,239,236,0.85), rgba(240,239,236,0));
+}
+:root[data-theme="light"] .ph {
+  color: #c0bfbd;
+}
+:root[data-theme="light"] .cp:hover .im {
+  box-shadow: 0 1px 2px rgba(52,40,30,0.252), 0 12px 26px -12px rgba(52,40,30,0.378), inset 0 0 0 1px rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .cp:focus-visible .im {
+  box-shadow: 0 24px 50px -16px rgba(var(--ct, 0,0,0), .9), inset 0 0 0 1px rgba(20,20,23,0.25);
+}
+:root[data-theme="light"] .cp:hover b {
+  color: #141417;
+}
+:root[data-theme="light"] .cp:focus-visible .im {
+  outline: 2px solid #141417;
+}
+:root[data-theme="light"] .light-film .cp:hover .im,
+:root[data-theme="light"] .light-film .cp:focus-visible .im {
+  box-shadow: 0 1px 2px rgba(52,40,30,0.252), 0 12px 26px -12px rgba(52,40,30,0.378), inset 0 0 0 1px rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .light-spot .cp-light .lp1 {
+  background: radial-gradient(50% 50% at 50% 44%, rgba(26,26,29,0.3), rgba(26,26,29,0.18) 34%, rgba(26,26,29,0.075) 62%, rgba(26,26,29,0.022) 83%, transparent);
+}
+:root[data-theme="light"] .light-spot .cp:hover .im,
+:root[data-theme="light"] .light-spot .cp:focus-visible .im {
+  box-shadow: 0 1px 1px rgba(52,40,30,0.294), 0 3px 6px rgba(52,40,30,0.21), 0 10px 20px rgba(52,40,30,0.202), 0 24px 44px -6px rgba(52,40,30,0.252),
+              0 48px 80px -24px rgba(52,40,30,0.302), inset 0 1px 0 rgba(20,20,23,0.42), inset 0 0 0 1px rgba(20,20,23,0.12);
+}
+:root[data-theme="light"] .ck .n {
+  -webkit-text-stroke: 2.5px rgba(20,20,23,0.5);
+}
+:root[data-theme="light"] .ck .im {
+  box-shadow: 0 10px 30px -10px rgba(52,40,30,0.378), inset 0 0 0 1px var(--line);
+}
+:root[data-theme="light"] .ck:hover .n {
+  -webkit-text-stroke-color: #141417;
+}
+:root[data-theme="light"] .cc .fan img {
+  box-shadow: 0 14px 30px -8px rgba(52,40,30,0.336), 0 0 0 1px rgba(20,20,23,0.12);
+}
+:root[data-theme="light"] .cc .t small {
+  color: #2b2b2d;
+}
+:root[data-theme="light"] .cg small {
+  color: rgba(20,20,23,0.75);
+}
+:root[data-theme="light"] .empty b {
+  color: #141417;
+}
+:root[data-theme="light"] .cat-wrap.stuck {
+  background: linear-gradient(180deg, var(--bg) 78%, rgba(240,239,236,0));
+}
+:root[data-theme="light"] .cat-dh b {
+  -webkit-text-stroke: 2px rgba(20,20,23,0.55);
+}
+:root[data-theme="light"] .pp-ini {
+  background: linear-gradient(160deg, #cfcecb, #e3e2df);
+  color: rgba(20,20,23,0.5);
+}
+:root[data-theme="light"] .pp-ph {
+  box-shadow: 0 0 0 1px rgba(20,20,23,0.14), 0 14px 30px -14px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .pp.dir .pp-ph {
+  box-shadow: 0 0 0 2px #141417, 0 14px 30px -14px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .pp:hover .pp-ph,
+:root[data-theme="light"] .pp:focus-visible .pp-ph {
+  box-shadow: 0 0 0 2px #141417, 0 18px 34px -14px rgba(52,40,30,0.399);
+}
+:root[data-theme="light"] .pp-n {
+  background: #141417;
+  color: #f6f5f1;
+  box-shadow: 0 4px 12px rgba(52,40,30,0.21);
+}
+:root[data-theme="light"] .pp.dir small {
+  color: rgba(20,20,23,0.8);
+}
+:root[data-theme="light"] .pz-bg {
+  -webkit-mask: linear-gradient(#f6f5f1 25%, transparent);
+  mask: linear-gradient(#f6f5f1 25%, transparent);
+}
+:root[data-theme="light"] .pz-av {
+  box-shadow: 0 0 0 3px rgba(20,20,23,0.9), 0 30px 60px -20px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .pz-k {
+  color: rgba(20,20,23,0.62);
+}
+:root[data-theme="light"] .pz-bt {
+  color: rgba(20,20,23,0.74);
+}
+:root[data-theme="light"] .pz-po {
+  box-shadow: 0 0 0 1px rgba(20,20,23,0.1), 0 16px 30px -12px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .pz-f:hover .pz-po,
+:root[data-theme="light"] .pz-f:focus-visible .pz-po {
+  box-shadow: 0 0 0 2px #141417, 0 24px 40px -14px rgba(52,40,30,0.399);
+}
+:root[data-theme="light"] .pz-f::before {
+  background: rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .pz-f::after {
+  background: #141417;
+}
+:root[data-theme="light"] .pz-f b {
+  color: rgba(20,20,23,0.78);
+}
+:root[data-theme="light"] .pz-f b::before {
+  background: rgba(20,20,23,0.3);
+}
+:root[data-theme="light"] .pz-gap::before {
+  border-top: 1px dashed rgba(20,20,23,0.22);
+}
+:root[data-theme="light"] .pk-ph {
+  box-shadow: 0 0 0 1px rgba(20,20,23,0.12), 0 14px 26px -14px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .pk-a:hover .pk-ph,
+:root[data-theme="light"] .pk-a:focus-visible .pk-ph {
+  box-shadow: 0 0 0 2px #141417, 0 18px 30px -14px rgba(52,40,30,0.399);
+}
+:root[data-theme="light"] .set-opt {
+  background: #eeedea;
+}
+:root[data-theme="light"] .set-opt:hover {
+  border-color: rgba(20,20,23,0.3);
+}
+:root[data-theme="light"] .set-opt[aria-checked="true"] {
+  border-color: #141417;
+  box-shadow: 0 0 0 1px #141417;
+}
+:root[data-theme="light"] .set-opt:focus-visible {
+  outline: 2px solid #141417;
+}
+:root[data-theme="light"] .set-demo img {
+  outline: 1px solid rgba(20,20,23,0.2);
+}
+:root[data-theme="light"] .set-demo-film img {
+  box-shadow: 0 1px 2px rgba(52,40,30,0.252), 0 10px 22px -10px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .set-demo-projecteur i {
+  background: radial-gradient(120px 150px at 50% 44%, rgba(26,26,29,0.3), rgba(26,26,29,0.18) 34%, rgba(26,26,29,0.075) 62%, rgba(26,26,29,0.022) 83%, transparent);
+}
+:root[data-theme="light"] .set-demo-projecteur img {
+  box-shadow: 0 1px 1px rgba(52,40,30,0.294), 0 3px 6px rgba(52,40,30,0.21), 0 8px 16px rgba(52,40,30,0.202), 0 18px 34px -6px rgba(52,40,30,0.252), 0 36px 60px -20px rgba(52,40,30,0.302);
+}
+:root[data-theme="light"] .set-ck {
+  background: #141417;
+  color: #f6f5f1;
+}
+:root[data-theme="light"] .light-film .pv-sh {
+  --pv-shadow: 0 2px 8px rgba(52,40,30,0.231), 0 24px 60px -6px rgba(52,40,30,0.315);
+}
+:root[data-theme="light"] .light-spot .pv-sh {
+  --pv-shadow: 0 2px 4px rgba(52,40,30,0.273), 0 10px 26px rgba(52,40,30,0.21), 0 34px 90px -10px rgba(52,40,30,0.294);
+}
+:root[data-theme="light"] .light-spot .pv-c::after {
+  box-shadow: inset 0 1px 0 rgba(20,20,23,0.3);
+}
+:root[data-theme="light"] .pv-im::after {
+  background: linear-gradient(0deg, var(--s1) 2%, rgba(230,229,226,0.5) 30%, transparent 60%);
+}
+:root[data-theme="light"] .pv-play {
+  background: #141417;
+  color: #f6f5f1;
+}
+:root[data-theme="light"] .pv-play:hover {
+  background: #2b2b2d;
+}
+:root[data-theme="light"] .pv-rd {
+  border: 1.5px solid rgba(20,20,23,0.35);
+}
+:root[data-theme="light"] .pv-rd:hover {
+  border-color: #141417;
+  background: rgba(20,20,23,0.08);
+}
+:root[data-theme="light"] .crumb {
+  background: rgba(20,20,23,0.1);
+  border: 1px solid rgba(20,20,23,0.12);
+}
+:root[data-theme="light"] .crumb:hover {
+  background: rgba(20,20,23,0.18);
+  color: #141417;
+}
+:root[data-theme="light"] .by a b {
+  color: #141417;
+}
+:root[data-theme="light"] .more-btn {
+  color: #141417;
+}
+:root[data-theme="light"] .resume .pb {
+  background: rgba(20,20,23,0.2);
+}
+:root[data-theme="light"] .resume .pb i {
+  background: #141417;
+}
+:root[data-theme="light"] .in-col b {
+  color: #141417;
+}
+:root[data-theme="light"] .ep-cur {
+  background: #141417;
+  color: #f6f5f1;
+}
+:root[data-theme="light"] .modal-bg {
+  background: rgba(246,245,241,0.55);
+}
+:root[data-theme="light"] .modal {
+  background: rgba(221,221,217,0.94);
+  box-shadow: 0 40px 100px -20px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .modal-close:hover {
+  color: #141417;
+  background: rgba(20,20,23,0.1);
+}
+:root[data-theme="light"] .wall {
+  background: rgba(240,239,236,0.97);
+}
+@supports (backdrop-filter: blur(1px)) {
+:root[data-theme="light"] .wall {
+  background: rgba(240,239,236,0.92);
+}
+}
+:root[data-theme="light"] .wall.typing .wall-p.on {
+  box-shadow: 0 0 0 2px rgba(20,20,23,0.85), 0 14px 30px -8px rgba(20,20,23,0.28);
+}
+:root[data-theme="light"] .wall .wall-p.sel {
+  box-shadow: 0 0 0 3px #141417, 0 18px 40px -8px rgba(20,20,23,0.45);
+}
+:root[data-theme="light"] .wall-cap {
+  background: linear-gradient(0deg, rgba(246,245,241,0.92), rgba(246,245,241,0));
+}
+:root[data-theme="light"] .toast {
+  background: rgba(216,215,212,0.92);
+  box-shadow: 0 20px 50px -10px rgba(52,40,30,0.336);
+}
+:root[data-theme="light"] .offline {
+  background: rgba(216,215,212,0.94);
+  box-shadow: 0 24px 60px -10px rgba(52,40,30,0.357);
+}
+:root[data-theme="light"] .offline .label {
+  color: #141417;
+}
+:root[data-theme="light"] .closed-screen::after {
+  background: radial-gradient(closest-side, rgba(240,239,236,0), var(--bg));
+}
+:root[data-theme="light"] .closed-last {
+  background: rgba(20,20,23,0.06);
+  border: 1px solid rgba(20,20,23,0.1);
+  box-shadow: 0 24px 50px -24px rgba(52,40,30,0.378);
+}
+:root[data-theme="light"] .closed-pg i {
+  background: rgba(20,20,23,0.18);
+}
+:root[data-theme="light"] .closed-pg u {
+  background: #141417;
+}
+:root[data-theme="light"] .closed-screen .closed-hint {
+  background: rgba(20,20,23,0.06);
+  border: 1px solid rgba(20,20,23,0.1);
+}
+:root[data-theme="light"] .closed-hint b {
+  background: #141417;
+  color: #f6f5f1;
+}

@@ -154,6 +154,20 @@ const metaHtml = (rating, parts, tags = []) =>
 
 // Taille du grand titre selon sa longueur
 const titleSize = (t) => t.length > 26 ? ' xl' : t.length > 15 ? ' l' : '';
+// Le grand titre : le logo du film s'il existe (images/…-logo), sinon le titre écrit
+// La teinte du logo est mesurée à l'affichage : un logo blanc passe en noir en thème clair, un logo noir passe en blanc en sombre
+window.mpfTone = (img) => {
+  try {
+    const w = 48, h = Math.max(1, Math.round(w * img.naturalHeight / img.naturalWidth)), c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data; let s = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 100) { s += .2126 * d[i] + .7152 * d[i + 1] + .0722 * d[i + 2]; n++; }
+    if (n) img.dataset.tone = s / n > 170 ? 'light' : s / n < 70 ? 'dark' : 'mid';
+  } catch (e) { /* teinte inconnue : le logo reste tel quel */ }
+};
+const titleHtml = (cls, title, logo, tone) => logo
+  ? `<h1 class="${cls} has-logo"><img class="title-logo" src="${esc(logo)}" alt="${esc(title)}" decoding="async" onload="mpfTone(this)"></h1>`
+  : `<h1 class="${cls}${titleSize(title)}">${esc(title)}</h1>`;
 
 // ─── COULEUR D'UNE IMAGE ──────────────────────────────────────────────────────
 // La couleur dominante d'une image (les tons vifs et clairs comptent plus), ramenée
