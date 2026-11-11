@@ -2206,7 +2206,7 @@ const showClosed = () => {
     <h1 class="display">La séance est terminée</h1>
     <p>Le site est arrêté : tu peux fermer cet onglet et éjecter le disque.</p>
     ${card}
-    <p class="closed-hint">Pour revenir, double-clique sur <b>▶ WATCH</b> tout en haut du disque</p>
+    <p class="closed-hint">Pour revenir, double-clique sur <b>▶ WATCH</b></p>
   </div>`;
 };
 $('#quit-btn').addEventListener('click', async () => {
