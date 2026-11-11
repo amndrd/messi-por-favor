@@ -1,0 +1,31 @@
+LE TICKET D'ENTRÉE — mis de côté le 11 novembre 2026
+=====================================================
+
+Ce dossier garde l'écran du ticket d'entrée : un ticket de cinéma suspendu à
+un cordon, qu'on coupe aux ciseaux le long des pointillés, puis une vague de
+lumière « velours » qui emporte le ticket et révèle l'accueil.
+Il n'est plus chargé par le site, mais rien n'a été supprimé.
+
+  ticket.js   le ticket, la coupe et la vague (WebGL)
+  ticket.css  sa mise en page
+
+POUR LE REMETTRE
+1. Remettre les deux fichiers à leur place :
+     ticket.js  → js/ticket.js
+     ticket.css → css/ticket.css
+2. Dans index.html, rajouter ces deux lignes :
+     après  <link rel="stylesheet" href="/css/clair.css">
+            <link rel="stylesheet" href="/css/ticket.css">
+     après  <script src="/js/arrivee.js"></script>
+            <script src="/js/ticket.js"></script>
+
+Ce qui est resté branché dans le site (inoffensif sans le ticket) :
+  - js/app.js donne les chiffres du catalogue à window.mpfPret(…) ;
+  - js/arrivee.js envoie l'évènement « mpf-arrivee-out » quand le logo s'efface.
+
+À vérifier en le remettant : la vague redessine l'accueil (l'écran du hero,
+son halo et son ombre) dans ticket.js (fonction homeImage). Si le hero a changé
+entre-temps, il faudra l'adapter.
+
+Les vidéos des essais (transition-liquide-v1 à v8) et les planches sont sur le
+Bureau, dans le dossier « Ticket - prototypes ».

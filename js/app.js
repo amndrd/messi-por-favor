@@ -2189,6 +2189,7 @@ const init = async () => {
   const data = await api('/api/data');
   if (data.error) {
     view.innerHTML = `<div class="wrap"><p class="empty">${esc(data.error)}. <a class="link-u" href="/">Réessayer →</a></p></div>`;
+    window.mpfPret?.();
     return;
   }
   loadData(data);

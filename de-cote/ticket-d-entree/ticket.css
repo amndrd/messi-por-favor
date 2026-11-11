@@ -1,0 +1,49 @@
+/* Ticket d'entrée (js/ticket.js). Le ticket lui-même est dessiné dans .tk-2d ; .tk-m est une copie
+   invisible qui sert seulement à mesurer la place des textes. */
+.tk-ov { position: fixed; inset: 0; z-index: 290; overflow: hidden; outline: none; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(60% 72% at 50% 46%, #ECEAE5, #E0DDD6 60%, #D3D0C8); }
+.tk-ov.dark { background: radial-gradient(60% 72% at 50% 46%, #2A2826, #181716 60%, #0D0D0C); }
+.tk-ov.dark .tk-tx { color: #F2F1EE; }
+.tk-ov.dark .tk-tx kbd { color: rgba(255,255,255,.45); }
+.tk-ov.dark .tk-tx kbd em { border-color: rgba(255,255,255,.22); color: rgba(255,255,255,.75); }
+.tk-ov.grab { cursor: grab; }
+.tk-ov.drag { cursor: grabbing; }
+.tk-ov.done { cursor: default; }
+.tk-ov.wave { background: transparent; }
+.tk-ov.wave .tk-2d, .tk-ov.wave .tk-tx { visibility: hidden; }
+.tk-2d { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tk-gl { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 295; pointer-events: none; }
+/* l'accueil reste caché sous le ticket, puis ses éléments apparaissent un à un */
+.tk-hide #header, .tk-hide .hero-copy, .tk-hide .hero-next, .tk-hide #view > :not(#hero) { opacity: 0; }
+
+/* La consigne, à gauche du ticket, à hauteur de la ligne de coupe */
+.tk-tx { position: absolute; transform: translate(-100%, -50%); white-space: nowrap; text-align: right; color: #151515; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.tk-tx b { display: block; font: 600 17px/1.25 Archivo, sans-serif; }
+.tk-tx kbd { display: block; margin-top: 12px; font: 500 11px Inter, sans-serif; color: rgba(21,21,21,.45); }
+.tk-tx kbd em { margin-left: 4px; padding: 2px 6px; border: 1px solid rgba(21,21,21,.2); border-radius: 5px; font-style: normal; color: rgba(21,21,21,.75); }
+.tk-ov.narrow .tk-tx { transform: translateX(-50%); text-align: center; }
+@media (hover: none) { .tk-tx kbd { display: none; } }
+
+/* La copie invisible du ticket (mêmes polices, même mise en page) */
+.tk-m { position: absolute; left: -10000px; top: 0; width: 340px; height: 640px; visibility: hidden; color: #151515; pointer-events: none; }
+.tk-m i { display: block; font-style: normal; white-space: nowrap; }
+.tk-m .q-bl { display: inline-block; width: 0; height: 0; vertical-align: baseline; }
+.tk-m .q-in { position: absolute; inset: 0; padding: 22px 20px; }
+.tk-m .q-hd { display: flex; justify-content: center; margin-top: 28px; }
+.tk-m .q-lg { width: 36.4px; height: 46px; }
+.tk-m .q-rows { display: grid; grid-template-columns: 1fr 1fr; margin-top: 16px; border-top: 1px solid transparent; border-bottom: 1px solid transparent; font: 500 9.5px/1.45 Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.tk-m .q-rows > div { padding: 9px 0; min-height: 60px; }
+.tk-m .q-rows > div:first-child { border-right: 1px solid transparent; }
+.tk-m .q-rows > div + div { padding-left: 12px; }
+.tk-m .q-blk { position: relative; margin-top: 14px; height: 240px; color: #fff; }
+.tk-m .q-holo { position: absolute; right: 14px; top: 0; bottom: 0; width: 44px; }
+.tk-m .q-hl { position: absolute; left: 50%; top: 22px; width: 26.9px; height: 34px; margin-left: -13.45px; }
+.tk-m .q-k { position: absolute; left: 16px; top: 16px; font: 500 9px Inter, sans-serif; letter-spacing: .16em; text-transform: uppercase; opacity: .6; }
+.tk-m .q-big { position: absolute; left: 16px; bottom: 18px; font: 800 54px/.84 Archivo, sans-serif; font-stretch: 62.5%; text-transform: uppercase; }
+.tk-m .q-trio { display: grid; grid-template-columns: 1fr 1fr 1fr; margin-top: 12px; font: 500 9px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+.tk-m .q-lb { opacity: .5; }
+.tk-m .q-vl { margin-top: 4px; font: 650 14px Archivo, sans-serif; letter-spacing: .01em; text-transform: none; }
+.tk-m .q-stub { position: absolute; left: 20px; right: 20px; top: 528px; display: flex; justify-content: space-between; align-items: flex-end; }
+.tk-m .q-bar { width: 196px; height: 46px; }
+.tk-m .q-mono { margin-top: 6px; font: 400 9px Inter, sans-serif; letter-spacing: .08em; opacity: .65; }
+.tk-m .q-admit { text-align: right; font: 600 9px/1.35 Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
